@@ -6,8 +6,8 @@ import math
 
 class SmartMoneyBTC(QCAlgorithm):
     """Jigsaw swing strategy on BTCUSDT 1-min candles.
-    Swing structure detects trend. After signal, waits for pullback
-    entry via RSI dip + MA alignment. ATR-based dynamic SL/TP.
+    Swing structure detects trend. Waits for RSI pullback to enter.
+    Trailing stop locks in profits. ATR-based dynamic SL/TP.
     """
 
     def initialize(self):
@@ -19,21 +19,23 @@ class SmartMoneyBTC(QCAlgorithm):
         self._symbol = self.add_crypto("BTCUSDT", Resolution.MINUTE, Market.BINANCE).symbol
 
         # swing params
-        self._swing_len = 50
+        self._swing_len = 70
         self._lookback = 800
         self._max_swings = 12
 
         # indicators
         self._atr = self.atr(self._symbol, 500, resolution=Resolution.MINUTE)
-        self._ema_fast = self.ema(self._symbol, 200, resolution=Resolution.MINUTE)
-        self._ema_slow = self.ema(self._symbol, 500, resolution=Resolution.MINUTE)
         self._rsi_ind = self.rsi(self._symbol, 14, resolution=Resolution.MINUTE)
 
-        # ATR multipliers + floors (v12 best settings)
+        # ATR multipliers + floors (v12 best)
         self._atr_sl_mult = 8.0
         self._atr_tp_mult = 32.0
         self._min_sl_pct = 0.025
         self._min_tp_pct = 0.10
+
+        # trailing stop: activate at 2% profit, trail at 1.2%
+        self._trail_activate_pct = 0.02
+        self._trail_distance_pct = 0.012
 
         self._position_pct = 0.25
 
@@ -47,15 +49,17 @@ class SmartMoneyBTC(QCAlgorithm):
         self._prev_high_level = None
         self._prev_low_level = None
 
-        # pending signal: wait for pullback entry after swing fires
-        self._pending_signal = 0  # 1=pending long, -1=pending short
-        self._pending_bar = 0     # bar when signal was set
-        self._pending_window = 240  # look for entry within 4 hours
+        # pending signal
+        self._pending_signal = 0
+        self._pending_bar = 0
+        self._pending_window = 240
 
         # trade state
         self._entry_price = None
         self._stop_price = None
         self._target_price = None
+        self._trail_price = None  # trailing stop level
+        self._max_favorable = 0.0  # best price seen in trade
         self._last_trade_bar = 0
         self._in_position = 0
 
@@ -138,21 +142,17 @@ class SmartMoneyBTC(QCAlgorithm):
 
         return 0
 
-    def _pullback_entry_ok(self, direction, price):
-        """Check if price has pulled back enough for a good entry.
-        For longs: RSI dipped below 45 (pullback), price above fast EMA.
-        For shorts: RSI spiked above 55 (bounce), price below fast EMA.
-        """
-        if not self._rsi_ind.is_ready or not self._ema_fast.is_ready:
+    def _pullback_entry_ok(self, direction):
+        """Check if RSI shows a pullback for entry."""
+        if not self._rsi_ind.is_ready:
             return False
 
         rsi_val = self._rsi_ind.current.value
-        ema_f = self._ema_fast.current.value
 
         if direction == 1:
-            return rsi_val < 40 and price > ema_f
+            return rsi_val < 40
         else:
-            return rsi_val > 60 and price < ema_f
+            return rsi_val > 60
 
     def _calc_sl_tp(self, price, direction):
         """Calculate SL/TP using ATR with minimum % floors."""
@@ -168,6 +168,24 @@ class SmartMoneyBTC(QCAlgorithm):
             return price - sl_dist, price + tp_dist
         else:
             return price + sl_dist, price - tp_dist
+
+    def _update_trailing_stop(self, price):
+        """Update trailing stop once trade is in sufficient profit."""
+        if self._in_position == 0 or not self._entry_price:
+            return
+
+        if self._in_position == 1:
+            pnl_pct = (price - self._entry_price) / self._entry_price
+            if pnl_pct >= self._trail_activate_pct:
+                new_trail = price * (1 - self._trail_distance_pct)
+                if self._trail_price is None or new_trail > self._trail_price:
+                    self._trail_price = new_trail
+        else:
+            pnl_pct = (self._entry_price - price) / self._entry_price
+            if pnl_pct >= self._trail_activate_pct:
+                new_trail = price * (1 + self._trail_distance_pct)
+                if self._trail_price is None or new_trail < self._trail_price:
+                    self._trail_price = new_trail
 
     def on_data(self, data: Slice):
         """Process each 1-min candle."""
@@ -185,20 +203,26 @@ class SmartMoneyBTC(QCAlgorithm):
             self._highs = self._highs[-self._lookback:]
             self._lows = self._lows[-self._lookback:]
 
-        # dynamic SL / TP check
+        # exit checks: SL, TP, trailing stop
         if self._in_position != 0 and self._stop_price and self._target_price:
-            if self._in_position == 1:
-                hit_sl = price <= self._stop_price
-                hit_tp = price >= self._target_price
-            else:
-                hit_sl = price >= self._stop_price
-                hit_tp = price <= self._target_price
+            self._update_trailing_stop(price)
 
-            if hit_sl or hit_tp:
+            hit_exit = False
+            if self._in_position == 1:
+                hit_exit = (price <= self._stop_price
+                            or price >= self._target_price
+                            or (self._trail_price and price <= self._trail_price))
+            else:
+                hit_exit = (price >= self._stop_price
+                            or price <= self._target_price
+                            or (self._trail_price and price >= self._trail_price))
+
+            if hit_exit:
                 self.liquidate(self._symbol)
                 self._entry_price = None
                 self._stop_price = None
                 self._target_price = None
+                self._trail_price = None
                 self._in_position = 0
                 self._last_trade_bar = self._bar_count
                 return
@@ -208,10 +232,9 @@ class SmartMoneyBTC(QCAlgorithm):
                 and self._in_position == 0
                 and self._bar_count - self._last_trade_bar >= 60):
 
-            # expire pending signal after window
             if self._bar_count - self._pending_bar > self._pending_window:
                 self._pending_signal = 0
-            elif self._pullback_entry_ok(self._pending_signal, price):
+            elif self._pullback_entry_ok(self._pending_signal):
                 direction = self._pending_signal
                 self._pending_signal = 0
 
@@ -222,6 +245,7 @@ class SmartMoneyBTC(QCAlgorithm):
 
                 self._entry_price = price
                 self._stop_price, self._target_price = self._calc_sl_tp(price, direction)
+                self._trail_price = None
                 self._in_position = direction
                 self._last_trade_bar = self._bar_count
                 return
@@ -281,6 +305,5 @@ class SmartMoneyBTC(QCAlgorithm):
         if signal == 0:
             return
 
-        # set pending signal — wait for pullback entry
         self._pending_signal = signal
         self._pending_bar = self._bar_count
