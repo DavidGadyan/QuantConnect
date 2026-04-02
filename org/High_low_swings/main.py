@@ -1,0 +1,286 @@
+# region imports
+from AlgorithmImports import *
+import math
+# endregion
+
+
+class SmartMoneyBTC(QCAlgorithm):
+    """Jigsaw swing strategy on BTCUSDT 1-min candles.
+    Swing structure detects trend. After signal, waits for pullback
+    entry via RSI dip + MA alignment. ATR-based dynamic SL/TP.
+    """
+
+    def initialize(self):
+        self.set_start_date(2025, 1, 1)
+        self.set_end_date(2026, 4, 1)
+        self.set_cash(10000)
+        self.set_brokerage_model(BrokerageName.BINANCE, AccountType.MARGIN)
+
+        self._symbol = self.add_crypto("BTCUSDT", Resolution.MINUTE, Market.BINANCE).symbol
+
+        # swing params
+        self._swing_len = 50
+        self._lookback = 800
+        self._max_swings = 12
+
+        # indicators
+        self._atr = self.atr(self._symbol, 500, resolution=Resolution.MINUTE)
+        self._ema_fast = self.ema(self._symbol, 200, resolution=Resolution.MINUTE)
+        self._ema_slow = self.ema(self._symbol, 500, resolution=Resolution.MINUTE)
+        self._rsi_ind = self.rsi(self._symbol, 14, resolution=Resolution.MINUTE)
+
+        # ATR multipliers + floors (v12 best settings)
+        self._atr_sl_mult = 8.0
+        self._atr_tp_mult = 32.0
+        self._min_sl_pct = 0.025
+        self._min_tp_pct = 0.10
+
+        self._position_pct = 0.25
+
+        # candle storage
+        self._highs = []
+        self._lows = []
+        self._bar_count = 0
+
+        # swing points
+        self._swing_points = []
+        self._prev_high_level = None
+        self._prev_low_level = None
+
+        # pending signal: wait for pullback entry after swing fires
+        self._pending_signal = 0  # 1=pending long, -1=pending short
+        self._pending_bar = 0     # bar when signal was set
+        self._pending_window = 240  # look for entry within 4 hours
+
+        # trade state
+        self._entry_price = None
+        self._stop_price = None
+        self._target_price = None
+        self._last_trade_bar = 0
+        self._in_position = 0
+
+        self.is_live = self.live_mode
+        self.log(f"Live mode: {self.is_live}")
+
+    def _classify_hl_type(self, swing_type, level):
+        """Classify swing as HH/LH/HL/LL."""
+        if swing_type == 1:
+            if self._prev_high_level is None:
+                hl_type = None
+            elif level > self._prev_high_level:
+                hl_type = "HH"
+            else:
+                hl_type = "LH"
+            self._prev_high_level = level
+        else:
+            if self._prev_low_level is None:
+                hl_type = None
+            elif level < self._prev_low_level:
+                hl_type = "LL"
+            else:
+                hl_type = "HL"
+            self._prev_low_level = level
+        return hl_type
+
+    def _get_swing_signal(self):
+        """Swing structure signal: 1=bullish, -1=bearish, 0=none."""
+        pts = self._swing_points
+        if len(pts) < 6:
+            return 0
+
+        last6 = pts[-6:]
+        types = [p["hl_type"] for p in last6 if p["hl_type"] is not None]
+        if len(types) < 5:
+            return 0
+
+        hh = sum(1 for t in types if t == "HH")
+        hl = sum(1 for t in types if t == "HL")
+        ll = sum(1 for t in types if t == "LL")
+        lh = sum(1 for t in types if t == "LH")
+
+        bullish = hh + hl
+        bearish = ll + lh
+
+        angles = []
+        for i in range(len(pts) - 4, len(pts) - 1):
+            if i < 0:
+                continue
+            dx = pts[i + 1]["bar_idx"] - pts[i]["bar_idx"]
+            prev_lvl = pts[i]["level"]
+            if prev_lvl == 0 or dx == 0:
+                continue
+            dp = (pts[i + 1]["level"] - prev_lvl) / prev_lvl
+            angles.append(math.degrees(math.atan2(dp * 10000, dx)))
+
+        if len(angles) < 2:
+            return 0
+
+        abs_angles = [abs(a) for a in angles]
+        first_abs = abs_angles[0]
+        last_abs = abs_angles[-1]
+        is_plateauing = first_abs > 0 and last_abs < first_abs * 0.4
+
+        drift = 0
+        if len(pts) >= 3:
+            drift = (pts[-1]["level"] - pts[-3]["level"]) / pts[-3]["level"]
+
+        if not is_plateauing:
+            if bullish >= 5 and hh >= 2 and hl >= 1:
+                return 1
+            if bearish >= 5 and ll >= 2 and lh >= 1:
+                return -1
+
+        if is_plateauing:
+            if drift < -0.01:
+                return -1
+            if drift > 0.01:
+                return 1
+
+        return 0
+
+    def _pullback_entry_ok(self, direction, price):
+        """Check if price has pulled back enough for a good entry.
+        For longs: RSI dipped below 45 (pullback), price above fast EMA.
+        For shorts: RSI spiked above 55 (bounce), price below fast EMA.
+        """
+        if not self._rsi_ind.is_ready or not self._ema_fast.is_ready:
+            return False
+
+        rsi_val = self._rsi_ind.current.value
+        ema_f = self._ema_fast.current.value
+
+        if direction == 1:
+            return rsi_val < 40 and price > ema_f
+        else:
+            return rsi_val > 60 and price < ema_f
+
+    def _calc_sl_tp(self, price, direction):
+        """Calculate SL/TP using ATR with minimum % floors."""
+        if self._atr.is_ready and self._atr.current.value > 0:
+            atr_val = self._atr.current.value
+            sl_dist = max(self._atr_sl_mult * atr_val, price * self._min_sl_pct)
+            tp_dist = max(self._atr_tp_mult * atr_val, price * self._min_tp_pct)
+        else:
+            sl_dist = price * self._min_sl_pct
+            tp_dist = price * self._min_tp_pct
+
+        if direction == 1:
+            return price - sl_dist, price + tp_dist
+        else:
+            return price + sl_dist, price - tp_dist
+
+    def on_data(self, data: Slice):
+        """Process each 1-min candle."""
+        if not data.bars.contains_key(self._symbol):
+            return
+
+        bar = data.bars[self._symbol]
+        self._bar_count += 1
+        price = float(bar.close)
+
+        self._highs.append(float(bar.high))
+        self._lows.append(float(bar.low))
+
+        if len(self._highs) > self._lookback:
+            self._highs = self._highs[-self._lookback:]
+            self._lows = self._lows[-self._lookback:]
+
+        # dynamic SL / TP check
+        if self._in_position != 0 and self._stop_price and self._target_price:
+            if self._in_position == 1:
+                hit_sl = price <= self._stop_price
+                hit_tp = price >= self._target_price
+            else:
+                hit_sl = price >= self._stop_price
+                hit_tp = price <= self._target_price
+
+            if hit_sl or hit_tp:
+                self.liquidate(self._symbol)
+                self._entry_price = None
+                self._stop_price = None
+                self._target_price = None
+                self._in_position = 0
+                self._last_trade_bar = self._bar_count
+                return
+
+        # check pending signal for pullback entry
+        if (self._pending_signal != 0
+                and self._in_position == 0
+                and self._bar_count - self._last_trade_bar >= 60):
+
+            # expire pending signal after window
+            if self._bar_count - self._pending_bar > self._pending_window:
+                self._pending_signal = 0
+            elif self._pullback_entry_ok(self._pending_signal, price):
+                direction = self._pending_signal
+                self._pending_signal = 0
+
+                if direction == 1:
+                    self.set_holdings(self._symbol, self._position_pct)
+                else:
+                    self.set_holdings(self._symbol, -self._position_pct)
+
+                self._entry_price = price
+                self._stop_price, self._target_price = self._calc_sl_tp(price, direction)
+                self._in_position = direction
+                self._last_trade_bar = self._bar_count
+                return
+
+        if len(self._highs) < self._swing_len * 2 + 1:
+            return
+
+        # detect swing
+        idx = len(self._highs) - self._swing_len - 1
+        new_swing = False
+
+        is_swing_high = all(
+            self._highs[idx] >= self._highs[idx - j] and
+            self._highs[idx] >= self._highs[idx + j]
+            for j in range(1, self._swing_len + 1)
+        )
+        is_swing_low = all(
+            self._lows[idx] <= self._lows[idx - j] and
+            self._lows[idx] <= self._lows[idx + j]
+            for j in range(1, self._swing_len + 1)
+        )
+
+        if is_swing_high:
+            level = self._highs[idx]
+            hl_type = self._classify_hl_type(1, level)
+            self._swing_points.append({
+                "bar_idx": self._bar_count - self._swing_len,
+                "level": level,
+                "swing_type": 1,
+                "hl_type": hl_type,
+            })
+            if len(self._swing_points) > self._max_swings:
+                self._swing_points = self._swing_points[-self._max_swings:]
+            new_swing = True
+
+        if is_swing_low:
+            level = self._lows[idx]
+            hl_type = self._classify_hl_type(-1, level)
+            self._swing_points.append({
+                "bar_idx": self._bar_count - self._swing_len,
+                "level": level,
+                "swing_type": -1,
+                "hl_type": hl_type,
+            })
+            if len(self._swing_points) > self._max_swings:
+                self._swing_points = self._swing_points[-self._max_swings:]
+            new_swing = True
+
+        if not new_swing:
+            return
+
+        # cooldown: 8 hours between swing signals
+        if self._bar_count - self._last_trade_bar < 480:
+            return
+
+        signal = self._get_swing_signal()
+        if signal == 0:
+            return
+
+        # set pending signal — wait for pullback entry
+        self._pending_signal = signal
+        self._pending_bar = self._bar_count

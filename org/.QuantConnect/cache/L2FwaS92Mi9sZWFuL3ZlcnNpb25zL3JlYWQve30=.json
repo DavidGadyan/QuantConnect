@@ -1,0 +1,15 @@
+{
+    "versions": [
+        {
+            "id": 17649,
+            "created": "2026-03-26 21:56:40",
+            "description": "Resolved missing reference issues in the AlgorithmImports package to ensure required dependencies are found correctly during builds.",
+            "leanHash": "f00d02be834b461557c61fd73146f46a8d4a6b86",
+            "leanCloudHash": "f21347cc2d8c98341a4e55baca530d703bba43c4",
+            "name": "master",
+            "ref": "refs/heads/master",
+            "public": true
+        }
+    ],
+    "success": true
+}

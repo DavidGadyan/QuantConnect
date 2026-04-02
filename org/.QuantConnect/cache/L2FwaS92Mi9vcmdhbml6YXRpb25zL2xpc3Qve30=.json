@@ -1,0 +1,16 @@
+{
+    "organizations": [
+        {
+            "id": "1ad16222b78408cf205ddeefc6140e66",
+            "name": "David Gadyan",
+            "type": "Researcher",
+            "ownerName": "You",
+            "members": 1,
+            "selected": false,
+            "skylightSync": 1,
+            "preferred": true,
+            "profileImage": "https://cdn.quantconnect.com/i/tu/organization-default-icon.png"
+        }
+    ],
+    "success": true
+}

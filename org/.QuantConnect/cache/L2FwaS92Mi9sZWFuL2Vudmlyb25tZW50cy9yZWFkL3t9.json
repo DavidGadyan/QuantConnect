@@ -1,0 +1,32 @@
+{
+    "environments": [
+        {
+            "id": 1,
+            "name": "Foundation Default",
+            "path": null,
+            "description": "Default core foundation for LEAN baking in the most of the popular libraries for quantitative analysis.",
+            "public": 1,
+            "cloud": 1,
+            "local": 1
+        },
+        {
+            "id": 6,
+            "name": "Foundation Autogluon",
+            "path": "/Foundation-Autogluon",
+            "description": "Foundation including the Autogluon package for LLM training.",
+            "public": 1,
+            "cloud": 1,
+            "local": 0
+        },
+        {
+            "id": 7,
+            "name": "Foundation Legacy",
+            "path": "/Foundation-Legacy",
+            "description": "A backwards compatability environment for libraries with outdated dependencies",
+            "public": 1,
+            "cloud": 1,
+            "local": 0
+        }
+    ],
+    "success": true
+}
