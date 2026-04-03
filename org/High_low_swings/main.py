@@ -151,6 +151,27 @@ class SmartMoneyBTC(QCAlgorithm):
 
         return 0
 
+    def _price_confirms_trend(self, direction, price):
+        """Check price hasn't broken trend structure.
+        For longs: price must be above the last swing low (uptrend intact).
+        For shorts: price must be below the last swing high (downtrend intact).
+        """
+        pts = self._swing_points
+        if len(pts) < 2:
+            return True
+
+        if direction == 1:
+            # find last swing low
+            for p in reversed(pts):
+                if p["swing_type"] == -1:
+                    return price > p["level"]
+        else:
+            # find last swing high
+            for p in reversed(pts):
+                if p["swing_type"] == 1:
+                    return price < p["level"]
+        return True
+
     def _pullback_entry_ok(self, direction):
         """Check if RSI shows a pullback for entry."""
         if not self._rsi_ind.is_ready:
@@ -280,7 +301,8 @@ class SmartMoneyBTC(QCAlgorithm):
 
             if self._bar_count - self._pending_bar > self._pending_window:
                 self._pending_signal = 0
-            elif self._pullback_entry_ok(self._pending_signal):
+            elif (self._pullback_entry_ok(self._pending_signal)
+                    and self._price_confirms_trend(self._pending_signal, price)):
                 direction = self._pending_signal
                 self._pending_signal = 0
 

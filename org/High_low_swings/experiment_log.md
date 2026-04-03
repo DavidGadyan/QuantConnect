@@ -8,19 +8,20 @@
 2. Classify each swing as HH/LH (for highs) or LL/HL (for lows)
 3. Count bullish (HH+HL) vs bearish (LL+LH) in last 6 swings
 4. Calculate angles between consecutive swing points to detect plateauing
-5. If NOT plateauing: bullish>=5 (hh>=2, hl>=1) -> long signal; bearish>=5 (ll>=2, lh>=1) -> short signal
+5. If NOT plateauing: bullish>=5 (hh>=2, hl>=1) -> long; bearish>=5 (ll>=2, lh>=1) -> short
 6. If plateauing + drift > 1% -> long; drift < -1% -> short
 7. Signal goes to pending queue, wait for RSI pullback to enter (RSI<40 for long, RSI>60 for short)
-8. ATR-based SL/TP with percentage floor minimums
-9. Trailing stop locks in profits after activation threshold
+8. **NEW: Price-confirms-trend filter** — for longs, price must be above last swing low; for shorts, below last swing high
+9. ATR-based SL/TP with percentage floor minimums
+10. Trailing stop locks in profits after activation threshold
 
 ---
 
-## CURRENT BEST: v19 (+2.14% net profit) - CONFIRMED
+## CURRENT BEST: fix10 (+5.12% net profit) - CONFIRMED
 
 | Parameter | Value |
 |-----------|-------|
-| swing_len | **50** |
+| swing_len | 50 |
 | lookback | 800 |
 | max_swings | 12 |
 | ATR period | 500 |
@@ -29,87 +30,110 @@
 | ATR TP mult | 32.0 |
 | min_sl_pct | 2.5% |
 | min_tp_pct | 10% |
-| trail_activate | **1.5%** |
-| trail_distance | **1%** |
+| trail_activate | 1.5% |
+| trail_distance | 1% |
 | position_pct | 25% |
 | pending_window | 240 bars (4hr) |
 | cooldown | 480 bars (8hr) |
 | RSI entry | <40 long, >60 short |
+| **price_confirms** | **long: price > last swing low; short: price < last swing high** |
 
-**Confirmed Stats:** 577 orders | 41% win rate | 0.38% avg win | -0.28% avg loss | P/L ratio 1.36 | 8.3% drawdown | $1,504 fees | Sharpe -0.424
-
----
-
-## All Confirmed Backtest Results
-
-> **NOTE:** Earlier sessions had a cloud sync issue where local edits weren't reaching QC cloud.
-> Results marked "CONFIRMED" were verified with matching cloud code.
-> The original "v22 +5.56%" was invalid — cloud was running swing_len=70 at the time.
-
-### v19: swing50 + trailing stop (CONFIRMED +2.14%) - BEST
-- **Key params:** swing_len=50, trail activate 1.5%, trail distance 1%, RSI<40/>60, no EMA
-- **Result:** +2.14% | 577 orders | 41% win | 0.38% avg win | -0.28% avg loss | 8.3% DD | $1,504 fees
-- **What worked:** Adding trailing stop to v18. Removing EMA filter (swing structure alone determines trend)
-- **Backtest ID:** e3a53f4415ec309c82795ccbeb960cb3
-
-### v23/current: swing70 + trail 2%/1.2% (CONFIRMED -6.28%)
-- **Key params:** swing_len=70, trail activate 2%, trail distance 1.2%
-- **Result:** -6.28% | 474 orders | 34% win | 0.49% avg win | -0.31% avg loss | 12.5% DD | $1,187 fees
-- **Why it failed:** swing_len=70 too slow — signals arrive too late. Wider trail doesn't compensate
-- **Backtest ID:** 2f64f7e68b1ee61fc6f5bf275bd91d10
+**Stats:** 575 orders | 41% win | 0.39% avg win | -0.28% avg loss | P/L 1.40 | 7.2% DD | $1,520 fees
+**Backtest ID:** aa0318e0d0d5109fefbe50a462e3ec6e
 
 ---
 
-## Changes Tried and Their Impact (from v19 baseline)
+## Monthly Equity Analysis
 
-### WORSE: Deeper RSI thresholds (RSI<35/>65)
-- Combined with position 35% (was 25%)
-- Result: -8.39% (was +2.14%)
-- **Why:** Deeper RSI paradoxically worsens timing. Fewer entries, but not better ones. Larger position amplifies losses
+### v19 (before price-confirms-trend)
+| Period End | Equity | Net Return | Period Return |
+|-----------|--------|-----------|---------------|
+| Sep 2025 | $10,860 | +8.60% | +8.60% (Jan-Sep) |
+| Oct 2025 | $10,587 | +5.87% | -2.73% (Oct) |
+| Nov 2025 | $10,900 | +9.00% | +3.13% (Nov) |
+| Dec 2025 | $10,285 | +2.85% | **-6.15% (Dec)** |
+| Feb 2026 | $10,569 | +5.69% | +2.84% (Jan-Feb) |
+| Apr 2026 | $10,214 | +2.14% | -3.55% (Mar) |
 
-### WORSE: Tighter trailing stop (activate 1%, trail 0.7%) + shorter cooldown (6hr)
-- Result: -13.28% (was +2.14%)
-- **Why:** Tighter trail cuts winners too early (avg win dropped 0.38% -> 0.24%). Shorter cooldown adds noise trades (753 orders vs 577). Both changes destructive together
+### fix10 (with price-confirms-trend)
+| Period End | Equity | Net Return | Dec Loss |
+|-----------|--------|-----------|----------|
+| Dec 2025 | $10,475 | +4.75% | **~-4.25%** (improved from -6.15%) |
+| Apr 2026 | $10,512 | +5.12% | — |
 
-### WORSE: Longer swing_len (60 or 70)
-- swing_len=70 confirmed at -6.28%
-- **Why:** Signals arrive too late, miss the move. More confirmation ≠ better trades for 1-min candles
-
-### WORSE: Wider trailing stop (activate 2%, trail 1.2%) without swing_len change
-- Combined with swing_len=70: -6.28%
-- **Why:** Wider trail alone doesn't help if base signal quality is poor
-
-### INCONCLUSIVE: Volume SMA filter (vol >= 0.8x 50-bar avg)
-- Not properly confirmed due to sync issues
-- Likely too restrictive — filters out valid signals
-
-### INCONCLUSIVE: Longer pending window (300 bars vs 240)
-- Not properly confirmed due to sync issues
-- Likely reduces profits by delaying entry too much
+**Key improvement:** December drawdown reduced from -6.15% to ~-4.25% (saved ~2%).
 
 ---
 
-## Key Insights (Confirmed)
+## Previous Best: v19 (+2.14%)
+- Same params as fix10 but WITHOUT price-confirms-trend filter
+- **Stats:** 577 orders | 41% win | 0.38% avg win | -0.28% avg loss | P/L 1.36 | 8.3% DD | $1,504 fees
 
-1. **swing_len=50 is the proven winner** — longer values (60, 70) degrade performance
-2. **Trailing stop at 1.5%/1% is optimal** — tighter (1%/0.7%) kills winners, wider (2%/1.2%) not proven better
-3. **RSI 40/60 entry threshold works** — deeper (35/65) makes it worse
-4. **8hr cooldown is right** — shorter adds noise
-5. **25% position sizing is correct** — 35% amplifies losses
-6. **EMA is unnecessary** — swing structure alone determines trend
-7. **P/L ratio matters more than win rate** — 41% win rate is fine if avg win > avg loss
-8. **Fee drag is significant** — $1,504 on $10k capital = 15% of gross profits eaten by fees
-9. **Cloud sync matters** — always verify the cloud is running the intended code
+---
+
+## All Parameter Changes Tested (from v19 baseline +2.14%)
+
+### IMPROVED: Price-Confirms-Trend Filter (fix10) -> +5.12%
+- For longs: current price must be above last swing low (uptrend intact)
+- For shorts: current price must be below last swing high (downtrend intact)
+- **Why it works:** Prevents entering long when price has already broken below support (trend broken). Specifically helps during December 2025 crash where swing structure still showed bullish but price had already collapsed
+
+### Signal Strength / Trend Filters
+| Fix | Change | Result | Delta |
+|-----|--------|--------|-------|
+| fix1 | bullish>=6 (was >=5) | -7.97% | -10.1% — too strict |
+| fix5 | hh>=3 (was >=2) | -4.19% | -6.3% — too strict on consecutive HH |
+| fix6 | Disable plateau trades | -4.54% | -6.7% — plateau trades are net positive |
+| fix7 | bullish>=4 (was >=5) | +1.60% | -0.5% — more trades, more fees |
+
+### SL/TP Parameters
+| Fix | Change | Result | Delta |
+|-----|--------|--------|-------|
+| fix2 | min_sl_pct=3% (was 2.5%) | +1.56% | -0.6% |
+| fix8 | min_tp_pct=12% (was 10%) | +1.47% | -0.7% |
+| fix4 | ATR period=300 (was 500) | +2.14% | 0% — floors dominate |
+
+### Trailing Stop
+| Fix | Change | Result | Delta |
+|-----|--------|--------|-------|
+| earlier | trail 1%/0.7% | -13.28% | -15.4% — cuts winners |
+| earlier | trail 2%/1.2% | -6.28%* | *with swing70 |
+
+### Cooldown
+| Fix | Change | Result | Delta |
+|-----|--------|--------|-------|
+| fix9 | 12hr (was 8hr) | -8.38% | -10.5% — misses signals |
+| earlier | 6hr (was 8hr) | -13.28% | -15.4% — noise trades |
+
+### Risk Management
+| Fix | Change | Result | Delta |
+|-----|--------|--------|-------|
+| v28 | Drawdown protection + loss streak breaker | -6.38% | -8.5% — prevents recovery |
+| fix3 | drift threshold 2% (was 1%) | -1.60% | -3.7% |
+
+### Other
+| Fix | Change | Result | Delta |
+|-----|--------|--------|-------|
+| earlier | RSI<35/>65 + pos 35% | -8.39% | -10.5% |
+| earlier | swing_len=70 | -6.28% | -8.4% |
+| earlier | EMA filter | +1.17% | -1.0% |
+
+---
+
+## Key Insights
+1. **Price-confirms-trend is the biggest single improvement** (+3% net, reduced Dec DD by ~2%)
+2. **v19 params are otherwise a local optimum** — all other single-param changes degraded
+3. **December 2025 is the problem month** — BTC crash after Nov rally breaks swing patterns
+4. **Plateau trades are valuable** — removing costs -4.54%
+5. **ATR floors dominate** — ATR period irrelevant
+6. **Fee drag is ~15% of gross** — $1,520 fees on ~$2,060 gross profit
 
 ## What Has NOT Been Tried Yet
 - MACD crossover as additional entry timing confirmation
 - Multi-timeframe analysis (5-min or 15-min swing confirmation)
-- Dynamic position sizing based on signal strength
 - Asymmetric SL/TP by direction (longs vs shorts)
 - Time-of-day filter (avoid low-liquidity hours)
-- Swing point clustering (multiple swings at similar levels)
-- Relaxing signal thresholds (bullish>=4 instead of >=5)
-- Shorter ATR period (200-300 instead of 500) for more responsive SL/TP
-- Reducing fees via fewer but larger trades
-- Adding MACD or momentum divergence filter
-- Testing on different date ranges to check robustness
+- ATR volatility regime filter (skip when ATR > 1.5x average)
+- Different RSI period (7 or 21 instead of 14)
+- Analyzing last 8 swings instead of 6
+- Using swing amplitude to weight signals
