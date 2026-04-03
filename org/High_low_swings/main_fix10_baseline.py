@@ -37,7 +37,7 @@ class SmartMoneyBTC(QCAlgorithm):
         self._trail_activate_pct = 0.015
         self._trail_distance_pct = 0.01
 
-        self._position_pct = 0.30
+        self._position_pct = 0.25
 
         # candle storage
         self._highs = []
@@ -122,12 +122,12 @@ class SmartMoneyBTC(QCAlgorithm):
     def _get_swing_signal(self):
         """Swing structure signal: 1=bullish, -1=bearish, 0=none."""
         pts = self._swing_points
-        if len(pts) < 8:
+        if len(pts) < 6:
             return 0
 
-        last6 = pts[-8:]
+        last6 = pts[-6:]
         types = [p["hl_type"] for p in last6 if p["hl_type"] is not None]
-        if len(types) < 6:
+        if len(types) < 5:
             return 0
 
         hh = sum(1 for t in types if t == "HH")
@@ -162,9 +162,9 @@ class SmartMoneyBTC(QCAlgorithm):
             drift = (pts[-1]["level"] - pts[-3]["level"]) / pts[-3]["level"]
 
         if not is_plateauing:
-            if bullish >= 6 and hh >= 2 and hl >= 1:
+            if bullish >= 5 and hh >= 2 and hl >= 1:
                 return 1
-            if bearish >= 6 and ll >= 2 and lh >= 1:
+            if bearish >= 5 and ll >= 2 and lh >= 1:
                 return -1
 
         if is_plateauing:
@@ -419,18 +419,11 @@ class SmartMoneyBTC(QCAlgorithm):
         if not new_swing:
             return
 
-        signal = self._get_swing_signal()
-
-        # opposite signal cancels pending (even during cooldown)
-        if (self._pending_signal != 0
-                and signal != 0
-                and signal != self._pending_signal):
-            self._pending_signal = 0
-
         # cooldown: 8 hours between swing signals
         if self._bar_count - self._last_trade_bar < 480:
             return
 
+        signal = self._get_swing_signal()
         if signal == 0:
             return
 

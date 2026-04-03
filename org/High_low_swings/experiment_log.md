@@ -6,134 +6,177 @@
 ## Core Logic
 1. Detect swing highs/lows on 1-min candles using `swing_len` window
 2. Classify each swing as HH/LH (for highs) or LL/HL (for lows)
-3. Count bullish (HH+HL) vs bearish (LL+LH) in last 6 swings
-4. Calculate angles between consecutive swing points to detect plateauing
-5. If NOT plateauing: bullish>=5 (hh>=2, hl>=1) -> long; bearish>=5 (ll>=2, lh>=1) -> short
-6. If plateauing + drift > 1% -> long; drift < -1% -> short
-7. Signal goes to pending queue, wait for RSI pullback to enter (RSI<40 for long, RSI>60 for short)
-8. **NEW: Price-confirms-trend filter** — for longs, price must be above last swing low; for shorts, below last swing high
-9. ATR-based SL/TP with percentage floor minimums
-10. Trailing stop locks in profits after activation threshold
+3. Count bullish (HH+HL) vs bearish (LL+LH) in last N swings
+4. If NOT plateauing: bullish>=threshold (hh>=2, hl>=1) -> long; bearish>=threshold -> short
+5. If plateauing + drift > 1% -> long; drift < -1% -> short
+6. **Opposite signal cancels pending** — if bearish signal fires while bullish pending, cancel it
+7. Pending signal -> wait for RSI pullback (RSI<40 long, >60 short)
+8. **Price-confirms-trend:** for longs, price > last swing low; for shorts, price < last swing high
+9. ATR-based SL/TP with 2.5%/10% floors. Trailing stop 1.5%/1%
 
 ---
 
-## CURRENT BEST: fix10 (+5.12% net profit) - CONFIRMED
+## CURRENT BEST: fix25 (+12.93% net profit)
 
 | Parameter | Value |
 |-----------|-------|
 | swing_len | 50 |
-| lookback | 800 |
-| max_swings | 12 |
-| ATR period | 500 |
-| RSI period | 14 |
-| ATR SL mult | 8.0 |
-| ATR TP mult | 32.0 |
-| min_sl_pct | 2.5% |
-| min_tp_pct | 10% |
-| trail_activate | 1.5% |
-| trail_distance | 1% |
-| position_pct | 25% |
+| swing_lookback | last 8 swings (was 6) |
+| bullish/bearish threshold | >=6 out of 8 (was >=5 out of 6) |
+| ATR SL/TP mult | 8.0 / 32.0 |
+| min_sl/tp_pct | 2.5% / 10% |
+| trail | activate 1.5%, distance 1% |
+| position | **30%** (was 25%) |
 | pending_window | 240 bars (4hr) |
 | cooldown | 480 bars (8hr) |
-| RSI entry | <40 long, >60 short |
-| **price_confirms** | **long: price > last swing low; short: price < last swing high** |
+| **opposite_cancels** | opposite swing signal cancels pending |
+| **price_confirms** | price > last swing low (long) / price < last swing high (short) |
 
-**Stats:** 575 orders | 41% win | 0.39% avg win | -0.28% avg loss | P/L 1.40 | 7.2% DD | $1,520 fees
-**Backtest ID:** aa0318e0d0d5109fefbe50a462e3ec6e
+**Stats:** 582 orders | 41% win | 0.49% avg win | -0.32% avg loss | P/L 1.52 | 8.0% DD | $1,865 fees | Sharpe 0.417
 
----
-
-## Monthly Equity Analysis
-
-### v19 (before price-confirms-trend)
-| Period End | Equity | Net Return | Period Return |
-|-----------|--------|-----------|---------------|
-| Sep 2025 | $10,860 | +8.60% | +8.60% (Jan-Sep) |
-| Oct 2025 | $10,587 | +5.87% | -2.73% (Oct) |
-| Nov 2025 | $10,900 | +9.00% | +3.13% (Nov) |
-| Dec 2025 | $10,285 | +2.85% | **-6.15% (Dec)** |
-| Feb 2026 | $10,569 | +5.69% | +2.84% (Jan-Feb) |
-| Apr 2026 | $10,214 | +2.14% | -3.55% (Mar) |
-
-### fix10 (with price-confirms-trend)
-| Period End | Equity | Net Return | Dec Loss |
-|-----------|--------|-----------|----------|
-| Dec 2025 | $10,475 | +4.75% | **~-4.25%** (improved from -6.15%) |
-| Apr 2026 | $10,512 | +5.12% | — |
-
-**Key improvement:** December drawdown reduced from -6.15% to ~-4.25% (saved ~2%).
+### What changed from fix10 to fix25 (two improvements stacked):
+1. **Opposite signal cancels pending (fix18):** +4.69% → +8.48%. Prevents entering on stale bullish signals after market reverses. High-leverage December fix.
+2. **8 swings with bullish>=6 (fix23):** +8.48% → +10.76%. Stronger trend confirmation using more swing history. P/L ratio improved from 1.45 to 1.52.
+3. **Position 30% (fix25):** +10.76% → +12.93%. Slightly larger position captures more from improved signal quality. DD went from 6.7% to 8.0%.
 
 ---
 
-## Previous Best: v19 (+2.14%)
-- Same params as fix10 but WITHOUT price-confirms-trend filter
-- **Stats:** 577 orders | 41% win | 0.38% avg win | -0.28% avg loss | P/L 1.36 | 8.3% DD | $1,504 fees
+## Previous Best: fix10 (+4.69% net profit)
+
+| Parameter | Value |
+|-----------|-------|
+| swing_len | 50 |
+| swing_lookback | last 6 swings |
+| bullish/bearish threshold | >=5 out of 6 |
+| position | 25% |
+| **price_confirms** | price > last swing low (long) / price < last swing high (short) |
+
+**Stats:** 576 orders | 41% win | 0.39% avg win | -0.28% avg loss | P/L 1.39 | 7.2% DD | $1,522 fees
 
 ---
 
-## All Parameter Changes Tested (from v19 baseline +2.14%)
+## All Fixes Tested (Session 2 — from fix10 baseline)
 
-### IMPROVED: Price-Confirms-Trend Filter (fix10) -> +5.12%
-- For longs: current price must be above last swing low (uptrend intact)
-- For shorts: current price must be below last swing high (downtrend intact)
-- **Why it works:** Prevents entering long when price has already broken below support (trend broken). Specifically helps during December 2025 crash where swing structure still showed bullish but price had already collapsed
+### IMPROVED (kept, stacked into fix25)
+| Fix | Change | Result | Why it works |
+|-----|--------|--------|-------------|
+| fix18 | Opposite swing signal cancels pending | **+8.48%** (was +4.69%) | Prevents entering long after bearish signal fires — blocks stale entries during reversals |
+| fix23 | 8 swings, bullish>=6 threshold (was 6 swings, >=5) | **+10.76%** (on top of fix18) | More swing history = stronger trend confirmation, fewer false signals |
+| fix25 | Position 30% (was 25%) | **+12.93%** (on top of fix23) | Larger position capitalizes on improved signal quality |
 
-### Signal Strength / Trend Filters
-| Fix | Change | Result | Delta |
+### Donchian Kill Switch (no effect)
+| Fix | Change | Result | Why it failed |
+|-----|--------|--------|--------------|
+| fix14 | Donchian(20) cancel pending + exit on breakdown | +4.69% (no change) | 20-bar DCH on 1-min too narrow — never triggers |
+| fix15 | Donchian(120) cancel pending + exit on breakdown | +4.69% (no change) | DCH includes current bar — price can't break below its own recent low |
+
+### ADX Regime Filter (all worse)
+| Fix | Change | Result | Why it failed |
+|-----|--------|--------|--------------|
+| fix16 | ADX(14) > 20 entry gate | +2.37% | Blocks good trades in moderate-trend environments |
+| fix16b | ADX(14) > 25 entry gate | -5.02% | Too strict, blocks most entries |
+
+### Chandelier Exit (all worse)
+| Fix | Change | Result | Why it failed |
+|-----|--------|--------|--------------|
+| fix17 | Chandelier 3x ATR, no TP | -29.18% | ATR(500) on 1-min ≈ $50-100, so 3x = $150-300 (0.2%) — way too tight |
+| fix17b | Chandelier 15x ATR, no TP | -21.51% | Still too tight without TP — many trades reverse before meaningful profit |
+
+### EMA Regime Gate (worse)
+| Fix | Change | Result | Why it failed |
+|-----|--------|--------|--------------|
+| fix19 | EMA200 regime gate (longs above, shorts below) + fix18 | -8.20% | Blocks too many good pullback entries |
+
+### MACD Crossover (worse)
+| Fix | Change | Result | Why it failed |
+|-----|--------|--------|--------------|
+| fix21 | MACD(12,26,9) confirmation for entries + fix18 | -8.83% | Conflicts with RSI pullback — RSI says buy dip, MACD says don't (momentum down) |
+
+### RSI Period Variants (all worse)
+| Fix | Change | Result | Why it failed |
+|-----|--------|--------|--------------|
+| fix22 | RSI(7) instead of RSI(14) + fix18+fix23 | +7.08% | Faster RSI is noisier, more false pullback signals |
+| fix22b | RSI(21) instead of RSI(14) + fix18+fix23 | -7.06% | Slower RSI misses pullback entries, too late |
+
+### Swing Threshold Variants (worse)
+| Fix | Change | Result | Why it failed |
+|-----|--------|--------|--------------|
+| fix23b | 8 swings, bullish>=7 (stricter) + fix18 | -1.79% | Too strict, blocks valid trend signals |
+
+### Pending Window (worse)
+| Fix | Change | Result | Why it failed |
+|-----|--------|--------|--------------|
+| fix24 | pending_window 180 bars (3hr, was 4hr) + fix18+fix23 | +7.23% | Shorter window misses valid RSI pullback entries |
+
+### Position Size Variants
+| Fix | Change | Result | Notes |
 |-----|--------|--------|-------|
-| fix1 | bullish>=6 (was >=5) | -7.97% | -10.1% — too strict |
-| fix5 | hh>=3 (was >=2) | -4.19% | -6.3% — too strict on consecutive HH |
-| fix6 | Disable plateau trades | -4.54% | -6.7% — plateau trades are net positive |
-| fix7 | bullish>=4 (was >=5) | +1.60% | -0.5% — more trades, more fees |
+| fix25 | 30% position + fix18+fix23 | **+12.93%**, 8.0% DD | **Best risk/reward balance — kept** |
+| fix25b | 35% position + fix18+fix23 | +15.09%, 9.2% DD | Higher return but proportionally higher DD and fees ($2,200) |
 
-### SL/TP Parameters
-| Fix | Change | Result | Delta |
-|-----|--------|--------|-------|
-| fix2 | min_sl_pct=3% (was 2.5%) | +1.56% | -0.6% |
-| fix8 | min_tp_pct=12% (was 10%) | +1.47% | -0.7% |
-| fix4 | ATR period=300 (was 500) | +2.14% | 0% — floors dominate |
+### Cooldown (worse)
+| Fix | Change | Result | Why it failed |
+|-----|--------|--------|--------------|
+| fix26 | 6hr cooldown (was 8hr) + fix18+fix23+30% | +3.51% | More trades = more fee drag, worse quality signals |
 
-### Trailing Stop
-| Fix | Change | Result | Delta |
-|-----|--------|--------|-------|
-| earlier | trail 1%/0.7% | -13.28% | -15.4% — cuts winners |
-| earlier | trail 2%/1.2% | -6.28%* | *with swing70 |
+---
 
-### Cooldown
-| Fix | Change | Result | Delta |
-|-----|--------|--------|-------|
-| fix9 | 12hr (was 8hr) | -8.38% | -10.5% — misses signals |
-| earlier | 6hr (was 8hr) | -13.28% | -15.4% — noise trades |
+## All Fixes Tested (Session 1 — from v19 baseline)
 
-### Risk Management
-| Fix | Change | Result | Delta |
-|-----|--------|--------|-------|
-| v28 | Drawdown protection + loss streak breaker | -6.38% | -8.5% — prevents recovery |
-| fix3 | drift threshold 2% (was 1%) | -1.60% | -3.7% |
+### IMPROVED (kept)
+| Fix | Change | Result | Why it works |
+|-----|--------|--------|-------------|
+| fix10 | Price-confirms-trend filter | **+4.69%** (was +2.14%) | Prevents entering long when price broke below last swing low |
 
-### Other
-| Fix | Change | Result | Delta |
-|-----|--------|--------|-------|
-| earlier | RSI<35/>65 + pos 35% | -8.39% | -10.5% |
-| earlier | swing_len=70 | -6.28% | -8.4% |
-| earlier | EMA filter | +1.17% | -1.0% |
+### Entry Filters Tested (all worse)
+| Fix | Change | Result | Why it failed |
+|-----|--------|--------|--------------|
+| fix11 | ATR volatility filter (short ATR < 1.5x long ATR) | +0.47% | Too aggressive, blocks good volatile moves too |
+| fix12 | Last swing confirms (block if last swing is LH for long) | -7.38% | Too restrictive, blocks valid pullback entries |
+| fix13 | Price range filter (price in upper half for long) | -8.33% | Contradicts RSI pullback logic — we WANT low entries |
+
+### Signal Thresholds (all worse)
+| Fix | Change | Result |
+|-----|--------|--------|
+| fix1 | bullish>=6 (6 swings) | -7.97% |
+| fix5 | hh>=3 | -4.19% |
+| fix6 | No plateau trades | -4.54% |
+| fix7 | bullish>=4 | +1.60% |
+
+### SL/TP/Trail (all worse or same)
+| Fix | Change | Result |
+|-----|--------|--------|
+| fix2 | SL 3% | +1.56% |
+| fix8 | TP 12% | +1.47% |
+| fix4 | ATR period 300 | +2.14% (same) |
+| earlier | trail 1%/0.7% | -13.28% |
+| earlier | trail 2%/1.2% + swing70 | -6.28% |
+| fix20 | trail activate 2%, distance 1.5% + fix18 | -5.18% |
+
+### Cooldown/Risk (all worse)
+| Fix | Change | Result |
+|-----|--------|--------|
+| fix9 | 12hr cooldown | -8.38% |
+| earlier | 6hr cooldown (session 1) | -13.28% |
+| v28 | Drawdown protection | -6.38% |
+| fix3 | drift 2% | -1.60% |
+| earlier | RSI<35/>65 + pos 35% | -8.39% |
 
 ---
 
 ## Key Insights
-1. **Price-confirms-trend is the biggest single improvement** (+3% net, reduced Dec DD by ~2%)
-2. **v19 params are otherwise a local optimum** — all other single-param changes degraded
-3. **December 2025 is the problem month** — BTC crash after Nov rally breaks swing patterns
-4. **Plateau trades are valuable** — removing costs -4.54%
-5. **ATR floors dominate** — ATR period irrelevant
-6. **Fee drag is ~15% of gross** — $1,520 fees on ~$2,060 gross profit
+1. **Opposite signal cancels pending is the biggest single improvement** — nearly doubled profit (+4.69% → +8.48%)
+2. **8-swing lookback with >=6 threshold** — more swing history = better trend confirmation without being too strict
+3. **Position sizing matters** — 30% is optimal balance of return vs drawdown
+4. **Additional entry filters consistently hurt** — ADX, EMA, MACD all block good trades
+5. **Chandelier Exit doesn't work with this ATR setup** — ATR(500) on 1-min gives tiny values, exits too tight
+6. **RSI(14) is optimal** — faster/slower both degrade performance
+7. **Fee drag ~16%** — $1,865 fees on ~$3,161 gross profit
+8. **ETH doesn't work** — -5.58% with same params
 
 ## What Has NOT Been Tried Yet
-- MACD crossover as additional entry timing confirmation
-- Multi-timeframe analysis (5-min or 15-min swing confirmation)
-- Asymmetric SL/TP by direction (longs vs shorts)
-- Time-of-day filter (avoid low-liquidity hours)
-- ATR volatility regime filter (skip when ATR > 1.5x average)
-- Different RSI period (7 or 21 instead of 14)
-- Analyzing last 8 swings instead of 6
-- Using swing amplitude to weight signals
+- Multi-timeframe: confirm trend on 5-min or 15-min candles
+- Time-of-day filter (weekend/low-liquidity hours)
+- Longer ATR period for Chandelier (e.g. ATR on 5-min or 15-min resolution)
+- Different swing_len values with 8-swing lookback
+- Fee reduction via maker orders (limit orders instead of market)
