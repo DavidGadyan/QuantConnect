@@ -11,12 +11,13 @@ class SmartMoneyBTC(QCAlgorithm):
     """
 
     def initialize(self):
-        self.set_start_date(2025, 1, 1)
+        self.set_start_date(2023, 1, 1)
         self.set_end_date(2026, 4, 1)
+        self.set_account_currency("USDT")
         self.set_cash(10000)
-        self.set_brokerage_model(BrokerageName.BINANCE, AccountType.MARGIN)
+        self.set_brokerage_model(BrokerageName.BINANCE_FUTURES, AccountType.MARGIN)
 
-        self._symbol = self.add_crypto("BTCUSDT", Resolution.MINUTE, Market.BINANCE).symbol
+        self._symbol = self.add_crypto_future("BTCUSDT", Resolution.MINUTE, Market.BINANCE).symbol
 
         # swing params
         self._swing_len = 50
@@ -26,6 +27,9 @@ class SmartMoneyBTC(QCAlgorithm):
         # indicators
         self._atr = self.atr(self._symbol, 500, resolution=Resolution.MINUTE)
         self._rsi_ind = self.rsi(self._symbol, 14, resolution=Resolution.MINUTE)
+
+        # ADX — trade only in range (ADX < 25), longer period for smoothing
+        self._adx_ind = self.adx(self._symbol, 28, resolution=Resolution.MINUTE)
 
         # ATR multipliers + floors
         self._atr_sl_mult = 8.0
@@ -144,7 +148,7 @@ class SmartMoneyBTC(QCAlgorithm):
                 continue
             dx = pts[i + 1]["bar_idx"] - pts[i]["bar_idx"]
             prev_lvl = pts[i]["level"]
-            if prev_lvl == 0 or dx == 0:
+            if not prev_lvl or prev_lvl == 0 or dx == 0:
                 continue
             dp = (pts[i + 1]["level"] - prev_lvl) / prev_lvl
             angles.append(math.degrees(math.atan2(dp * 10000, dx)))
@@ -158,7 +162,7 @@ class SmartMoneyBTC(QCAlgorithm):
         is_plateauing = first_abs > 0 and last_abs < first_abs * 0.4
 
         drift = 0
-        if len(pts) >= 3:
+        if len(pts) >= 3 and pts[-3]["level"] != 0:
             drift = (pts[-1]["level"] - pts[-3]["level"]) / pts[-3]["level"]
 
         if not is_plateauing:
@@ -204,9 +208,9 @@ class SmartMoneyBTC(QCAlgorithm):
         rsi_val = self._rsi_ind.current.value
 
         if direction == 1:
-            return rsi_val < 40
+            return rsi_val < 45
         else:
-            return rsi_val > 60
+            return rsi_val > 55
 
     def _calc_sl_tp(self, price, direction):
         """Calculate SL/TP using ATR with minimum % floors."""
@@ -353,7 +357,9 @@ class SmartMoneyBTC(QCAlgorithm):
             if self._bar_count - self._pending_bar > self._pending_window:
                 self._pending_signal = 0
             elif (self._pullback_entry_ok(self._pending_signal)
-                    and self._price_confirms_trend(self._pending_signal, price)):
+                    and self._price_confirms_trend(self._pending_signal, price)
+                    and (not self._adx_ind.is_ready
+                         or self._adx_ind.current.value < 25)):
                 direction = self._pending_signal
                 self._pending_signal = 0
 
@@ -430,7 +436,6 @@ class SmartMoneyBTC(QCAlgorithm):
         # cooldown: 8 hours between swing signals
         if self._bar_count - self._last_trade_bar < 480:
             return
-
         if signal == 0:
             return
 

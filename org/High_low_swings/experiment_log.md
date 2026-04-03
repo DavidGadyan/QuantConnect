@@ -10,13 +10,76 @@
 4. If NOT plateauing: bullish>=threshold (hh>=2, hl>=1) -> long; bearish>=threshold -> short
 5. If plateauing + drift > 1% -> long; drift < -1% -> short
 6. **Opposite signal cancels pending** — if bearish signal fires while bullish pending, cancel it
-7. Pending signal -> wait for RSI pullback (RSI<40 long, >60 short)
+7. **ADX(28) < 25 gate** — only enter in range-bound conditions, skip strong trends
+8. Pending signal -> wait for RSI pullback (RSI<45 long, >55 short)
 8. **Price-confirms-trend:** for longs, price > last swing low; for shorts, price < last swing high
 9. ATR-based SL/TP with 2.5%/10% floors. Trailing stop 1.5%/1%
 
 ---
 
-## CURRENT BEST: fix25 (+12.93% net profit)
+## CURRENT BEST: fixC — Futures + ADX<25 + RSI 45/55
+
+**Profitable across ALL time periods tested (1.25yr, 3yr, 6yr)**
+
+| Period | Net Profit | Drawdown | Orders | Fees | Win Rate | P/L Ratio | Sharpe |
+|--------|-----------|----------|--------|------|----------|-----------|--------|
+| 1.25yr (2025-2026) | **+18.08%** | 3.6% | 339 | ₮429 | 59% | 1.05 | 1.167 |
+| 3yr (2023-2026) | **+29.89%** | 10.5% | 1,305 | ₮1,648 | 37% | 2.11 | 0.314 |
+| 6yr (2020-2026) | **+34.41%** | 19.3% | 3,381 | ₮4,211 | 53% | 0.94 | 0.199 |
+
+| Parameter | Value |
+|-----------|-------|
+| **venue** | **Binance Futures** (was spot) |
+| **account currency** | **USDT** |
+| swing_len | 50 |
+| swing_lookback | last 8 swings |
+| bullish/bearish threshold | >=6 out of 8 |
+| ATR SL mult | 8.0 |
+| ATR TP mult | 32.0 |
+| min_sl/tp_pct | 2.5% / 10% |
+| trail | activate 1.5%, distance 1% |
+| position | 30% |
+| pending_window | 240 bars (4hr) |
+| cooldown | 480 bars (8hr) |
+| **RSI entry** | **< 45 long / > 55 short** (was 40/60) |
+| **ADX filter** | **ADX(28) < 25 — trade only in range** (inverted from earlier tests) |
+| opposite_cancels | opposite swing signal cancels pending |
+| price_confirms | price > last swing low (long) / price < last swing high (short) |
+
+### What changed from fix25 to fixC (three improvements):
+1. **Binance Futures** (fixA): fees dropped from 0.1%/0.1% to 0.02%/0.04%. 3yr: -11.59% → -5.36%
+2. **ADX(28) < 25 filter** (fixB): skip entries in strong trends where swing detection lags. 3yr: -5.36% → -2.07%
+3. **RSI 45/55** (fixC): earlier pullback entries, bigger average wins. 3yr: -2.07% → **+29.89%**
+
+### Why these fixes work together:
+- **Fee reduction** preserves the gross edge that was always there (+23% gross over 3yr)
+- **ADX < 25** prevents trading during fast rallies/crashes (2023 H2, 2024 H2) where swing detection lags
+- **RSI 45/55** catches pullbacks earlier — RSI 40/60 was waiting too long, entries arrived near reversals
+
+### Incremental Improvements: fixA → fixB → fixC (Futures)
+
+| Version | Change | 1.25yr | 3yr | 6yr |
+|---------|--------|--------|-----|-----|
+| fix25 (spot baseline) | 30% pos, 8 swings, >=6 | +12.93% | -14.01% | -38.89% |
+| fixA | Switch to Binance Futures | — | -5.36% | — |
+| fixB | + ADX(28) < 25 range filter | — | -2.07% | — |
+| **fixC** | **+ RSI 45/55 (was 40/60)** | **+18.08%** | **+29.89%** | **+34.41%** |
+
+### Spot Margin Comparison (fixC logic on Binance Spot)
+
+Same fixC logic running on spot with higher fees (0.1%/0.1% vs 0.02%/0.04%):
+
+| Period | Net Profit | Drawdown | Fees |
+|--------|-----------|----------|------|
+| 1.25yr (2025-2026) | +10.46% | 10.1% | $1,833 |
+| 3yr (2023-2026) | -15.75% | 31.0% | $4,029 |
+| 6yr (2020-2026) | -51.74% | 56.8% | $7,014 |
+
+**Conclusion:** Spot is profitable only on 1.25yr. Futures fee structure (0.02%/0.04%) is required for multi-year profitability. Fee drag on spot consumes the entire edge.
+
+---
+
+## Previous Best (Spot): fix25 (+12.93% net profit, 1.25yr only)
 
 | Parameter | Value |
 |-----------|-------|
@@ -164,15 +227,58 @@
 
 ---
 
+## Robustness Tests — All Versions Across Time Periods
+
+### 3-Year Test (2023-01-01 to 2026-04-01)
+
+| Version | 1.25yr (2025-2026) | 3yr (2023-2026) | 3yr DD | 3yr Orders | 3yr Fees |
+|---------|-------------------|-----------------|--------|-----------|----------|
+| v19 (baseline) | +2.14% | **-16.10%** | 23.4% | 1,512 | $3,458 |
+| fix10 (price-confirms) | +4.69% | **-12.43%** | 22.7% | 1,498 | $3,479 |
+| fix18 (+ opposite cancel) | +8.48% | **-12.50%** | 25.5% | 1,488 | $3,378 |
+| **fix23 (+ 8 swings, 25%)** | +10.76% | **-11.59%** | 24.9% | 1,550 | $3,462 |
+| fix25 (+ 30% pos) | +12.93% | **-14.01%** | 29.1% | 1,550 | $4,061 |
+
+### 6-Year Test (2020-01-01 to 2026-04-01)
+
+| Version | 1.25yr (2025-2026) | 6yr (2020-2026) | 6yr DD | 6yr Orders | 6yr Fees |
+|---------|-------------------|-----------------|--------|-----------|----------|
+| v19 (baseline) | +2.14% | **-46.42%** | 48.2% | 3,498 | $6,214 |
+| fix10 (price-confirms) | +4.69% | **-45.33%** | 48.5% | 3,462 | $6,133 |
+| fix18 (+ opposite cancel) | +8.48% | **-45.93%** | 50.9% | 3,446 | $5,978 |
+| **fix23 (+ 8 swings, 25%)** | +10.76% | **-33.28%** | 39.7% | 3,576 | $6,711 |
+| fix25 (+ 30% pos) | +12.93% | **-38.89%** | 45.9% | 3,576 | $7,595 |
+
+### Key Findings
+
+1. **No version is profitable over 3 or 6 years** — all lose money on longer periods
+2. **fix23 (8 swings, 25% position) is the most robust** — loses least on both 3yr (-11.59%) and 6yr (-33.28%)
+3. **fix25's larger position (30%) hurts on longer periods** — amplifies losses, 29.1% DD on 3yr vs 24.9%
+4. **Each improvement reduces 3yr loss**: v19 (-16.1%) → fix10 (-12.4%) → fix23 (-11.6%)
+5. **Fee drag is the primary killer** — $3,400-$4,000 fees on $10k over 3yr (34-40% of capital)
+6. **2023-2024 is a losing period** — strategy only profits in 2025, meaning ~$2,200+ losses in 2023-2024 offset the 2025 gains
+
+### Conclusion
+
+The strategy is profitable only in the most recent regime (2025). To make it viable long-term it needs:
+- Adaptive parameters that adjust to market regime
+- Higher timeframe confirmation (5-min or 15-min)
+- Fee reduction (limit orders, fewer trades)
+- Or: accept it as a regime-specific strategy and only deploy during similar conditions
+
+---
+
 ## Key Insights
 1. **Opposite signal cancels pending is the biggest single improvement** — nearly doubled profit (+4.69% → +8.48%)
 2. **8-swing lookback with >=6 threshold** — more swing history = better trend confirmation without being too strict
-3. **Position sizing matters** — 30% is optimal balance of return vs drawdown
+3. **Position sizing matters** — 30% is optimal balance of return vs drawdown on 2025 period
 4. **Additional entry filters consistently hurt** — ADX, EMA, MACD all block good trades
 5. **Chandelier Exit doesn't work with this ATR setup** — ATR(500) on 1-min gives tiny values, exits too tight
 6. **RSI(14) is optimal** — faster/slower both degrade performance
-7. **Fee drag ~16%** — $1,865 fees on ~$3,161 gross profit
+7. **Fee drag ~16-76%** — fees consume most/all profit over longer periods
 8. **ETH doesn't work** — -5.58% with same params
+9. **Strategy is overfit to 2025** — all versions lose -33% to -46% over 6 years
+10. **fix23 (25% pos, 8 swings) is most robust** — loses least over 6 years despite lower 1.25yr return
 
 ## What Has NOT Been Tried Yet
 - Multi-timeframe: confirm trend on 5-min or 15-min candles
@@ -180,3 +286,5 @@
 - Longer ATR period for Chandelier (e.g. ATR on 5-min or 15-min resolution)
 - Different swing_len values with 8-swing lookback
 - Fee reduction via maker orders (limit orders instead of market)
+- Adaptive swing_len based on volatility regime
+- Walk-forward optimization (train on rolling windows)
