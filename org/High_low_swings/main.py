@@ -27,7 +27,7 @@ class SmartMoneyBTC(QCAlgorithm):
         self._atr = self.atr(self._symbol, 500, resolution=Resolution.MINUTE)
         self._rsi_ind = self.rsi(self._symbol, 14, resolution=Resolution.MINUTE)
 
-        # ATR multipliers + floors (v12 best)
+        # ATR multipliers + floors
         self._atr_sl_mult = 8.0
         self._atr_tp_mult = 32.0
         self._min_sl_pct = 0.025
@@ -58,10 +58,19 @@ class SmartMoneyBTC(QCAlgorithm):
         self._entry_price = None
         self._stop_price = None
         self._target_price = None
-        self._trail_price = None  # trailing stop level
-        self._max_favorable = 0.0  # best price seen in trade
+        self._trail_price = None
         self._last_trade_bar = 0
         self._in_position = 0
+
+        # monthly tracking
+        self._month_trades = 0
+        self._month_wins = 0
+        self._month_losses = 0
+        self._month_sl = 0
+        self._month_tp = 0
+        self._month_trail = 0
+        self._month_pnl_sum = 0.0
+        self._prev_month = None
 
         self.is_live = self.live_mode
         self.log(f"Live mode: {self.is_live}")
@@ -196,6 +205,20 @@ class SmartMoneyBTC(QCAlgorithm):
         self._bar_count += 1
         price = float(bar.close)
 
+        # monthly summary log
+        cur_month = self.time.strftime("%Y-%m")
+        if self._prev_month and cur_month != self._prev_month:
+            eq = self.portfolio.total_portfolio_value
+            self.log(f"MONTH {self._prev_month} | trades={self._month_trades} W={self._month_wins} L={self._month_losses} | SL={self._month_sl} TP={self._month_tp} TRAIL={self._month_trail} | sumPnl={self._month_pnl_sum:.2f}% | equity={eq:.0f}")
+            self._month_trades = 0
+            self._month_wins = 0
+            self._month_losses = 0
+            self._month_sl = 0
+            self._month_tp = 0
+            self._month_trail = 0
+            self._month_pnl_sum = 0.0
+        self._prev_month = cur_month
+
         self._highs.append(float(bar.high))
         self._lows.append(float(bar.low))
 
@@ -218,6 +241,29 @@ class SmartMoneyBTC(QCAlgorithm):
                             or (self._trail_price and price >= self._trail_price))
 
             if hit_exit:
+                side = "LONG" if self._in_position == 1 else "SHORT"
+                pnl = 0
+                reason = "?"
+                if self._entry_price:
+                    if self._in_position == 1:
+                        pnl = (price - self._entry_price) / self._entry_price * 100
+                        reason = "SL" if price <= self._stop_price else ("TP" if price >= self._target_price else "TRAIL")
+                    else:
+                        pnl = (self._entry_price - price) / self._entry_price * 100
+                        reason = "SL" if price >= self._stop_price else ("TP" if price <= self._target_price else "TRAIL")
+                self.log(f"EXIT {side} {reason} entry={self._entry_price:.0f} exit={price:.0f} pnl={pnl:.2f}% eq={self.portfolio.total_portfolio_value:.0f}")
+                self._month_trades += 1
+                self._month_pnl_sum += pnl
+                if pnl > 0:
+                    self._month_wins += 1
+                else:
+                    self._month_losses += 1
+                if reason == "SL":
+                    self._month_sl += 1
+                elif reason == "TP":
+                    self._month_tp += 1
+                elif reason == "TRAIL":
+                    self._month_trail += 1
                 self.liquidate(self._symbol)
                 self._entry_price = None
                 self._stop_price = None
@@ -248,6 +294,9 @@ class SmartMoneyBTC(QCAlgorithm):
                 self._trail_price = None
                 self._in_position = direction
                 self._last_trade_bar = self._bar_count
+                side = "LONG" if direction == 1 else "SHORT"
+                rsi_val = self._rsi_ind.current.value
+                self.log(f"ENTER {side} price={price:.0f} sl={self._stop_price:.0f} tp={self._target_price:.0f} rsi={rsi_val:.1f} eq={self.portfolio.total_portfolio_value:.0f}")
                 return
 
         if len(self._highs) < self._swing_len * 2 + 1:

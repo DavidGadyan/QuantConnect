@@ -18,8 +18,8 @@
             },
             {
                 "chartName": "Portfolio Margin",
-                "width": 12,
-                "height": 6,
+                "width": 11,
+                "height": 7,
                 "row": 7,
                 "column": 1,
                 "sort": 71
@@ -28,17 +28,27 @@
                 "chartName": "Assets Sales Volume",
                 "width": 12,
                 "height": 5,
-                "row": 13,
+                "row": 14,
                 "column": 1,
-                "sort": 131
+                "sort": 141
+            },
+            {
+                "chartName": "BTCUSDT 18N",
+                "width": 12,
+                "height": 4,
+                "row": 19,
+                "column": 1,
+                "sort": 191,
+                "symbolId": "BTCUSDT 18N",
+                "displayName": "Asset Plot BTCUSDT"
             },
             {
                 "chartName": "Drawdown",
                 "width": 12,
                 "height": 7,
-                "row": 18,
+                "row": 28,
                 "column": 1,
-                "sort": 181
+                "sort": 281
             }
         ],
         "xs": [
@@ -52,8 +62,8 @@
             },
             {
                 "chartName": "Portfolio Margin",
-                "width": 12,
-                "height": 6,
+                "width": 11,
+                "height": 7,
                 "row": 7,
                 "column": 1,
                 "sort": 71
@@ -62,17 +72,27 @@
                 "chartName": "Assets Sales Volume",
                 "width": 12,
                 "height": 5,
-                "row": 13,
+                "row": 14,
                 "column": 1,
-                "sort": 131
+                "sort": 141
+            },
+            {
+                "chartName": "BTCUSDT 18N",
+                "width": 12,
+                "height": 4,
+                "row": 19,
+                "column": 1,
+                "sort": 191,
+                "symbolId": "BTCUSDT 18N",
+                "displayName": "Asset Plot BTCUSDT"
             },
             {
                 "chartName": "Drawdown",
                 "width": 12,
                 "height": 7,
-                "row": 18,
+                "row": 28,
                 "column": 1,
-                "sort": 181
+                "sort": 281
             }
         ],
         "sm": [
@@ -86,8 +106,8 @@
             },
             {
                 "chartName": "Portfolio Margin",
-                "width": 12,
-                "height": 6,
+                "width": 11,
+                "height": 7,
                 "row": 7,
                 "column": 1,
                 "sort": 71
@@ -96,17 +116,27 @@
                 "chartName": "Assets Sales Volume",
                 "width": 12,
                 "height": 5,
-                "row": 13,
+                "row": 14,
                 "column": 1,
-                "sort": 131
+                "sort": 141
+            },
+            {
+                "chartName": "BTCUSDT 18N",
+                "width": 12,
+                "height": 4,
+                "row": 19,
+                "column": 1,
+                "sort": 191,
+                "symbolId": "BTCUSDT 18N",
+                "displayName": "Asset Plot BTCUSDT"
             },
             {
                 "chartName": "Drawdown",
                 "width": 12,
                 "height": 7,
-                "row": 18,
+                "row": 28,
                 "column": 1,
-                "sort": 181
+                "sort": 281
             }
         ],
         "lg": [
@@ -120,8 +150,8 @@
             },
             {
                 "chartName": "Portfolio Margin",
-                "width": 12,
-                "height": 6,
+                "width": 11,
+                "height": 7,
                 "row": 7,
                 "column": 1,
                 "sort": 71
@@ -130,17 +160,27 @@
                 "chartName": "Assets Sales Volume",
                 "width": 12,
                 "height": 5,
-                "row": 13,
+                "row": 14,
                 "column": 1,
-                "sort": 131
+                "sort": 141
+            },
+            {
+                "chartName": "BTCUSDT 18N",
+                "width": 12,
+                "height": 4,
+                "row": 19,
+                "column": 1,
+                "sort": 191,
+                "symbolId": "BTCUSDT 18N",
+                "displayName": "Asset Plot BTCUSDT"
             },
             {
                 "chartName": "Drawdown",
                 "width": 12,
                 "height": 7,
-                "row": 18,
+                "row": 28,
                 "column": 1,
-                "sort": 181
+                "sort": 281
             }
         ],
         "xl": [
@@ -154,8 +194,8 @@
             },
             {
                 "chartName": "Portfolio Margin",
-                "width": 12,
-                "height": 6,
+                "width": 11,
+                "height": 7,
                 "row": 7,
                 "column": 1,
                 "sort": 71
@@ -164,17 +204,27 @@
                 "chartName": "Assets Sales Volume",
                 "width": 12,
                 "height": 5,
-                "row": 13,
+                "row": 14,
                 "column": 1,
-                "sort": 131
+                "sort": 141
+            },
+            {
+                "chartName": "BTCUSDT 18N",
+                "width": 12,
+                "height": 4,
+                "row": 19,
+                "column": 1,
+                "sort": 191,
+                "symbolId": "BTCUSDT 18N",
+                "displayName": "Asset Plot BTCUSDT"
             },
             {
                 "chartName": "Drawdown",
                 "width": 12,
                 "height": 7,
-                "row": 18,
+                "row": 28,
                 "column": 1,
-                "sort": 181
+                "sort": 281
             }
         ]
     }
