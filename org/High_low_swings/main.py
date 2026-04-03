@@ -83,11 +83,17 @@ class SmartMoneyBTC(QCAlgorithm):
         self._all_months = {}
         self._month_start_eq = 10000.0
 
+        # diagnostic tracking
+        self._entry_adx = 0.0
+        self._entry_bar_num = 0
+        self._consec_losses = 0
+        self._all_trades = []
+
         self.is_live = self.live_mode
         self.log(f"Live mode: {self.is_live}")
 
     def on_end_of_algorithm(self):
-        """Output monthly breakdown as summary statistics."""
+        """Output monthly breakdown and diagnostic analysis."""
         eq = self.portfolio.total_portfolio_value
         month_ret = (eq - self._month_start_eq) / self._month_start_eq * 100
         self._all_months[self._prev_month] = {
@@ -97,11 +103,79 @@ class SmartMoneyBTC(QCAlgorithm):
             "long_pnl": self._month_long_pnl, "short_pnl": self._month_short_pnl,
             "longs": self._month_longs, "shorts": self._month_shorts,
         }
+
+        # monthly stats
         for m, d in sorted(self._all_months.items()):
             self.set_runtime_statistic(
                 m,
                 f"{d['ret']:.1f}% T{d['trades']} W{d['w']}L{d['l']} SL{d['sl']}TP{d['tp']}TR{d['trail']} L{d['longs']}={d['long_pnl']:.1f}%S{d['shorts']}={d['short_pnl']:.1f}%"
             )
+
+        # worst and best months
+        sorted_months = sorted(self._all_months.items(), key=lambda x: x[1]["ret"])
+        worst5 = sorted_months[:5]
+        best5 = sorted_months[-5:][::-1]
+        self.set_runtime_statistic("WORST5",
+            " | ".join([f"{m}:{d['ret']:.1f}%" for m, d in worst5]))
+        self.set_runtime_statistic("BEST5",
+            " | ".join([f"{m}:{d['ret']:.1f}%" for m, d in best5]))
+
+        # trade-level analysis
+        if self._all_trades:
+            wins = [t for t in self._all_trades if t["pnl"] > 0]
+            losses = [t for t in self._all_trades if t["pnl"] <= 0]
+            # ADX analysis
+            w_adx = sum(t["adx"] for t in wins) / len(wins) if wins else 0
+            l_adx = sum(t["adx"] for t in losses) / len(losses) if losses else 0
+            self.set_runtime_statistic("ADX_WIN_vs_LOSS",
+                f"W={w_adx:.1f} L={l_adx:.1f}")
+            # bars in trade
+            w_bars = sum(t["bars_in"] for t in wins) / len(wins) if wins else 0
+            l_bars = sum(t["bars_in"] for t in losses) / len(losses) if losses else 0
+            self.set_runtime_statistic("BARS_WIN_vs_LOSS",
+                f"W={w_bars:.0f} L={l_bars:.0f}")
+            # signal age
+            w_age = sum(t["sig_age"] for t in wins) / len(wins) if wins else 0
+            l_age = sum(t["sig_age"] for t in losses) / len(losses) if losses else 0
+            self.set_runtime_statistic("AGE_WIN_vs_LOSS",
+                f"W={w_age:.0f} L={l_age:.0f}")
+            # direction breakdown
+            longs = [t for t in self._all_trades if t["side"] == "LONG"]
+            shorts = [t for t in self._all_trades if t["side"] == "SHORT"]
+            l_pnl = sum(t["pnl"] for t in longs)
+            s_pnl = sum(t["pnl"] for t in shorts)
+            l_wr = len([t for t in longs if t["pnl"] > 0]) / len(longs) * 100 if longs else 0
+            s_wr = len([t for t in shorts if t["pnl"] > 0]) / len(shorts) * 100 if shorts else 0
+            self.set_runtime_statistic("LONG_TOTAL",
+                f"N={len(longs)} pnl={l_pnl:.1f}% wr={l_wr:.0f}%")
+            self.set_runtime_statistic("SHORT_TOTAL",
+                f"N={len(shorts)} pnl={s_pnl:.1f}% wr={s_wr:.0f}%")
+            # exit reason breakdown
+            sl_trades = [t for t in self._all_trades if t["reason"] == "SL"]
+            tp_trades = [t for t in self._all_trades if t["reason"] == "TP"]
+            tr_trades = [t for t in self._all_trades if t["reason"] == "TRAIL"]
+            self.set_runtime_statistic("EXIT_REASONS",
+                f"SL={len(sl_trades)} TP={len(tp_trades)} TRAIL={len(tr_trades)}")
+            # max consecutive losses
+            max_cl = max((t["consec_l"] for t in self._all_trades), default=0)
+            self.set_runtime_statistic("MAX_CONSEC_LOSS", str(max_cl))
+            # ADX bucket analysis: trades with ADX 0-15 vs 15-20 vs 20-25
+            for lo, hi, label in [(0, 15, "ADX0-15"), (15, 20, "ADX15-20"), (20, 25, "ADX20-25")]:
+                bucket = [t for t in self._all_trades if lo <= t["adx"] < hi]
+                if bucket:
+                    b_pnl = sum(t["pnl"] for t in bucket)
+                    b_wr = len([t for t in bucket if t["pnl"] > 0]) / len(bucket) * 100
+                    self.set_runtime_statistic(label,
+                        f"N={len(bucket)} pnl={b_pnl:.1f}% wr={b_wr:.0f}%")
+            # weekly breakdown — worst weeks
+            week_pnl = {}
+            for t in self._all_trades:
+                w = t["week"]
+                week_pnl[w] = week_pnl.get(w, 0) + t["pnl"]
+            sorted_weeks = sorted(week_pnl.items(), key=lambda x: x[1])
+            worst_wk = sorted_weeks[:5]
+            self.set_runtime_statistic("WORST_WEEKS",
+                " | ".join([f"{w}:{p:.1f}%" for w, p in worst_wk]))
 
     def _classify_hl_type(self, swing_type, level):
         """Classify swing as HH/LH/HL/LL."""
@@ -316,11 +390,26 @@ class SmartMoneyBTC(QCAlgorithm):
                         pnl = (self._entry_price - price) / self._entry_price * 100
                         reason = "SL" if price >= self._stop_price else ("TP" if price <= self._target_price else "TRAIL")
                 self._trade_num += 1
+                bars_in = self._bar_count - self._entry_bar_num
+                sig_age = self._entry_bar_num - self._pending_bar if self._pending_bar else 0
                 # get swing context
                 last_types = ""
                 if len(self._swing_points) >= 4:
                     last_types = ",".join([str(p.get("hl_type", "?")) for p in self._swing_points[-4:]])
-                self.log(f"#{self._trade_num} EXIT {side} {reason} entry={self._entry_price:.0f} exit={price:.0f} pnl={pnl:.2f}% swings=[{last_types}] eq={self.portfolio.total_portfolio_value:.0f}")
+                self.log(f"#{self._trade_num} EXIT {side} {reason} entry={self._entry_price:.0f} exit={price:.0f} pnl={pnl:.2f}% adx={self._entry_adx:.1f} bars={bars_in} age={sig_age} swings=[{last_types}] eq={self.portfolio.total_portfolio_value:.0f}")
+                # track consecutive losses
+                if pnl <= 0:
+                    self._consec_losses += 1
+                else:
+                    self._consec_losses = 0
+                # store trade for analysis
+                self._all_trades.append({
+                    "num": self._trade_num, "month": self.time.strftime("%Y-%m"),
+                    "week": self.time.strftime("%Y-W%W"),
+                    "side": side, "reason": reason, "pnl": pnl,
+                    "adx": self._entry_adx, "bars_in": bars_in,
+                    "sig_age": sig_age, "consec_l": self._consec_losses,
+                })
                 self._month_trades += 1
                 self._month_pnl_sum += pnl
                 if self._in_position == 1:
@@ -359,7 +448,7 @@ class SmartMoneyBTC(QCAlgorithm):
             elif (self._pullback_entry_ok(self._pending_signal)
                     and self._price_confirms_trend(self._pending_signal, price)
                     and (not self._adx_ind.is_ready
-                         or self._adx_ind.current.value < 25)):
+                         or self._adx_ind.current.value < 20)):
                 direction = self._pending_signal
                 self._pending_signal = 0
 
@@ -372,10 +461,13 @@ class SmartMoneyBTC(QCAlgorithm):
                 self._stop_price, self._target_price = self._calc_sl_tp(price, direction)
                 self._trail_price = None
                 self._in_position = direction
+                self._entry_adx = self._adx_ind.current.value if self._adx_ind.is_ready else 0
+                self._entry_bar_num = self._bar_count
                 self._last_trade_bar = self._bar_count
                 side = "LONG" if direction == 1 else "SHORT"
                 rsi_val = self._rsi_ind.current.value
-                self.log(f"ENTER {side} price={price:.0f} sl={self._stop_price:.0f} tp={self._target_price:.0f} rsi={rsi_val:.1f} eq={self.portfolio.total_portfolio_value:.0f}")
+                adx_val = self._entry_adx
+                self.log(f"ENTER {side} price={price:.0f} sl={self._stop_price:.0f} tp={self._target_price:.0f} rsi={rsi_val:.1f} adx={adx_val:.1f} eq={self.portfolio.total_portfolio_value:.0f}")
                 return
 
         if len(self._highs) < self._swing_len * 2 + 1:
@@ -433,8 +525,8 @@ class SmartMoneyBTC(QCAlgorithm):
                 and signal != self._pending_signal):
             self._pending_signal = 0
 
-        # cooldown: 8 hours between swing signals
-        if self._bar_count - self._last_trade_bar < 480:
+        # cooldown: 12 hours between swing signals
+        if self._bar_count - self._last_trade_bar < 720:
             return
         if signal == 0:
             return

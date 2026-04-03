@@ -8,7 +8,7 @@ Collection of QuantConnect strategy experiments and research projects.
 
 Short-term `BTCUSDT` swing strategy built on `1-minute` candles. It detects directional bias from market structure using swing highs/lows and `HH`, `HL`, `LH`, `LL` classification, then waits for a pullback before entering instead of chasing the initial move.
 
-**Best model:** `fixC` — Binance Futures + ADX range filter + RSI 45/55
+**Best model:** `fixF` — Binance Futures + ADX<20 + RSI 45/55 + 12hr cooldown
 
 #### Logic
 
@@ -18,10 +18,10 @@ Short-term `BTCUSDT` swing strategy built on `1-minute` candles. It detects dire
 4. If not plateauing: `bullish >= 6` (with `hh >= 2`, `hl >= 1`) sets a pending long; mirror for short
 5. If plateauing and drift `> 1%` sets pending long; drift `< -1%` sets pending short
 6. If an opposite swing signal fires, cancel the existing pending signal
-7. Only enter when `ADX(28) < 25` (range-bound conditions, skip strong trends)
+7. Only enter when `ADX(28) < 20` (deep range-bound conditions, skip trends)
 8. Wait for RSI pullback to enter: long when `RSI(14) < 45`, short when `RSI(14) > 55`
 9. Confirm trend intact before entry: price must be above last swing low (long) or below last swing high (short)
-10. Pending signal expires after `4 hours`; `8-hour` cooldown between swing signals
+10. Pending signal expires after `4 hours`; `12-hour` cooldown between swing signals
 
 #### Configuration
 
@@ -34,35 +34,23 @@ Short-term `BTCUSDT` swing strategy built on `1-minute` candles. It detects dire
 | bullish/bearish threshold | `>= 6` out of 8 |
 | RSI period | `14` |
 | RSI entry | `< 45` long / `> 55` short |
-| ADX filter | `ADX(28) < 25` (trade only in range) |
+| ADX filter | `ADX(28) < 20` (trade only in deep range) |
 | position size | `30%` |
 | pending window | `240` bars (4 hr) |
-| cooldown | `480` bars (8 hr) |
+| cooldown | `720` bars (12 hr) |
 | SL | `max(8 x ATR(500), 2.5%)` |
 | TP | `max(32 x ATR(500), 10%)` |
 | trailing stop | activate at `1.5%` profit, trail at `1%` |
 
-#### Backtest Results (fixC — Futures)
+#### Backtest Results (fixF — Futures)
 
 Profitable across all time periods tested:
 
 | Period | Net Profit | Drawdown | Orders | Fees | Win Rate | Sharpe |
 |--------|-----------|----------|--------|------|----------|--------|
-| 1.25yr (2025-2026) | `+18.08%` | `3.6%` | `339` | `₮429` | `59%` | `1.167` |
-| 3yr (2023-2026) | `+29.89%` | `10.5%` | `1,305` | `₮1,648` | `37%` | `0.314` |
-| 6yr (2020-2026) | `+34.41%` | `19.3%` | `3,381` | `₮4,211` | `53%` | `0.199` |
-
-#### Spot Margin Results (fixC — same logic, Binance Spot)
-
-Same logic on spot with higher fees (0.1%/0.1% vs 0.02%/0.04%):
-
-| Period | Net Profit | Drawdown | Fees |
-|--------|-----------|----------|------|
-| 1.25yr (2025-2026) | `+10.46%` | `10.1%` | `$1,833` |
-| 3yr (2023-2026) | `-15.75%` | `31.0%` | `$4,029` |
-| 6yr (2020-2026) | `-51.74%` | `56.8%` | `$7,014` |
-
-Spot is profitable only on the 1.25yr period. Futures is required for multi-year profitability.
+| 1.25yr (2025-2026) | `+15.84%` | `4.3%` | `303` | `₮385` | `59%` | `0.993` |
+| 3yr (2023-2026) | `+34.19%` | `10.2%` | `1,145` | `₮1,519` | `40%` | `0.493` |
+| 6yr (2020-2026) | `+36.28%` | `28.4%` | `2,897` | `₮3,854` | `54%` | `0.234` |
 
 #### Improvement History
 
@@ -75,14 +63,17 @@ Spot is profitable only on the 1.25yr period. Futures is required for multi-year
 | fix25 | Position size 30% | `+12.93%` | `-14.01%` |
 | fixA | Switch to Binance Futures | — | `-5.36%` |
 | fixB | + ADX(28) < 25 range filter | — | `-2.07%` |
-| **fixC** | **+ RSI 45/55 (was 40/60)** | **`+18.08%`** | **`+29.89%`** |
+| fixC | + RSI 45/55 (was 40/60) | `+18.08%` | `+29.89%` |
+| **fixF** | **ADX<20 + 12hr cooldown** | **`+15.84%`** | **`+34.19%`** |
 
-Over 35 parameter changes tested. See `org/High_low_swings/experiment_log.md` for full results.
+Over 40 parameter changes tested. See `org/High_low_swings/experiment_log.md` for full results.
 
 #### Key Insights
 
 - The strategy was **gross-profitable all along** — fees consumed 150% of edge on spot
 - Switching to **Binance Futures** cuts fees by ~60% (0.02%/0.04% vs 0.10%/0.10%)
-- **ADX < 25 filter** prevents trading during fast rallies/crashes where swing detection lags
+- **ADX < 20** (tighter than 25) filters borderline entries during ADX oscillations within rallies
+- **12hr cooldown** reduces overtrading — Q4 2023 had 121 orders in 3 months, mostly noise
 - **RSI 45/55** catches pullbacks earlier — RSI 40/60 waited too long, entries arrived near reversals
+- **Worst period:** Q4 2023 (-8.25%) — BTC rallied 27k→42k, ADX dipped below threshold during pullbacks
 - Strategy does not work on `ETHUSDT` (`-5.58%` with same params on spot)
