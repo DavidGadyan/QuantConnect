@@ -19,7 +19,7 @@ class SmartMoneyBTC(QCAlgorithm):
         self._symbol = self.add_crypto("BTCUSDT", Resolution.MINUTE, Market.BINANCE).symbol
 
         # swing params
-        self._swing_len = 70
+        self._swing_len = 50
         self._lookback = 800
         self._max_swings = 12
 
@@ -33,9 +33,9 @@ class SmartMoneyBTC(QCAlgorithm):
         self._min_sl_pct = 0.025
         self._min_tp_pct = 0.10
 
-        # trailing stop: activate at 2% profit, trail at 1.2%
-        self._trail_activate_pct = 0.02
-        self._trail_distance_pct = 0.012
+        # trailing stop: activate at 1.5% profit, trail at 1%
+        self._trail_activate_pct = 0.015
+        self._trail_distance_pct = 0.01
 
         self._position_pct = 0.25
 
