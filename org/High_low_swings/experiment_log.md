@@ -17,15 +17,14 @@
 
 ---
 
-## CURRENT BEST: fixF — Futures + ADX<20 + RSI 45/55 + 12hr cooldown
+## CURRENT BEST: fixI — fixF + Enhanced Plateau Detection
 
-**Best 3yr Sharpe (0.493) and return (+34.19%). Profitable across ALL time periods.**
+**Best 6yr return (+42.43%) and Sharpe (0.303). Profitable across ALL time periods.**
 
 | Period | Net Profit | Drawdown | Orders | Fees | Win Rate | P/L Ratio | Sharpe |
 |--------|-----------|----------|--------|------|----------|-----------|--------|
-| 1.25yr (2025-2026) | **+15.84%** | 4.3% | 303 | ₮385 | 59% | 1.06 | 0.993 |
-| 3yr (2023-2026) | **+34.19%** | 10.2% | 1,145 | ₮1,519 | 40% | 2.00 | 0.493 |
-| 6yr (2020-2026) | **+36.28%** | 28.4% | 2,897 | ₮3,854 | 54% | 0.94 | 0.234 |
+| 3yr (2023-2026) | **+34.54%** | 10.2% | 1,145 | ₮1,521 | 40% | 2.01 | 0.499 |
+| 6yr (2020-2026) | **+42.43%** | 29.0% | 2,897 | ₮4,019 | 54% | 0.94 | 0.303 |
 
 | Parameter | Value |
 |-----------|-------|
@@ -46,12 +45,14 @@
 | opposite_cancels | opposite swing signal cancels pending |
 | price_confirms | price > last swing low (long) / price < last swing high (short) |
 
-### What changed from fixC to fixF (two improvements):
-1. **ADX(28) < 20** (was < 25): tighter range gate, filters borderline ADX entries. 3yr: +29.89% → +30.66% alone
-2. **12hr cooldown** (was 8hr): reduces overtrading, fewer noise trades. 3yr: +29.89% → +30.67% alone
-3. **Combined (fixF)**: synergistic effect. 3yr: +29.89% → **+34.19%**, Sharpe 0.314 → **0.493**
+### What changed from fixF to fixI:
+- **Enhanced plateau detection**: angles declining OR (angles declining moderately + swing compression)
+- Original plateau: `last_angle < first_angle * 0.4`
+- Enhanced: also triggers when `last_angle < first_angle * 0.6 AND bar_distances shrinking (last < first * 0.7)`
+- Detects consolidation earlier, catches drift trades sooner
+- 6yr improvement: +36.28% → **+42.43%**, Sharpe 0.234 → **0.303**
 
-### Incremental Improvements: fixA → fixF (Futures)
+### Incremental Improvements: fixA → fixI (Futures)
 
 | Version | Change | 1.25yr | 3yr | 6yr |
 |---------|--------|--------|-----|-----|
@@ -59,9 +60,8 @@
 | fixA | Switch to Binance Futures | — | -5.36% | — |
 | fixB | + ADX(28) < 25 range filter | — | -2.07% | — |
 | fixC | + RSI 45/55 (was 40/60) | +18.08% | +29.89% | +34.41% |
-| fixD | ADX < 20 (was < 25) | — | +30.66% | — |
-| fixE | 12hr cooldown (was 8hr) | — | +30.67% | — |
-| **fixF** | **ADX<20 + 12hr cooldown** | **+15.84%** | **+34.19%** | **+36.28%** |
+| fixF | ADX<20 + 12hr cooldown | +15.84% | +34.19% | +36.28% |
+| **fixI** | **+ Enhanced plateau detection** | — | **+34.54%** | **+42.43%** |
 
 ### Spot Margin Comparison (fixC logic on Binance Spot)
 
@@ -106,8 +106,12 @@ Q4 2023 is the worst period (**-8.25%**). BTC rallied ~27k→42k (Oct-Dec 2023).
 | fixD | ADX < 20 (was < 25) | +30.66% | 0.335 | 10.6% | Marginal, blocks 12 borderline trades |
 | fixE | 12hr cooldown (was 8hr) | +30.67% | 0.397 | 9.5% | Fewer noise trades, lower DD |
 | **fixF** | **ADX<20 + 12hr cooldown** | **+34.19%** | **0.493** | **10.2%** | **Synergistic: both filter Q4 2023 losses** |
-| fixG | fixF + 3-loss circuit breaker | +26.36% | 0.279 | 9.5% | Breaker skips valid recovery entries |
-| fixH | fixF + pending window 180 (3hr) | +25.72% | 0.262 | 9.5% | Shorter window misses valid pullbacks |
+| fixG-old | fixF + 3-loss circuit breaker | +26.36% | 0.279 | 9.5% | Breaker skips valid recovery entries |
+| fixH-old | fixF + pending window 180 (3hr) | +25.72% | 0.262 | 9.5% | Shorter window misses valid pullbacks |
+| fixG | Amplitude + chainsaw filter | +31.29% | 0.420 | 11.5% | Filters block good trades (too strict at 0.3%) |
+| fixH | ADX hysteresis (18/23, 60-bar dwell) | +19.02% | 0.055 | 10.3% | Too restrictive, 1hr dwell blocks most entries |
+| fixH2 | ADX hysteresis soft (20/24, 15-bar) | +25.93% | 0.269 | 16.2% | Dwell still delays entries, worse DD |
+| **fixI** | **Enhanced plateau (+ compression)** | **+34.54%** | **0.499** | **10.2%** | **Better structure reading, +6% on 6yr** |
 
 ### fixF vs fixC Comparison
 

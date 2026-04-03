@@ -187,5 +187,177 @@
                 "sort": 131
             }
         ]
+    },
+    "liveGrid": {
+        "xs": [
+            {
+                "chartName": "Strategy Equity",
+                "width": 12,
+                "height": 9,
+                "row": 1,
+                "column": 1,
+                "sort": 11
+            },
+            {
+                "chartName": "Portfolio Margin",
+                "width": 12,
+                "height": 6,
+                "row": 10,
+                "column": 1,
+                "sort": 101
+            },
+            {
+                "chartName": "Assets Sales Volume",
+                "width": 12,
+                "height": 5,
+                "row": 16,
+                "column": 1,
+                "sort": 161
+            },
+            {
+                "chartName": "Drawdown",
+                "width": 12,
+                "height": 4,
+                "row": 21,
+                "column": 1,
+                "sort": 211
+            }
+        ],
+        "sm": [
+            {
+                "chartName": "Strategy Equity",
+                "width": 12,
+                "height": 9,
+                "row": 1,
+                "column": 1,
+                "sort": 11
+            },
+            {
+                "chartName": "Portfolio Margin",
+                "width": 12,
+                "height": 6,
+                "row": 10,
+                "column": 1,
+                "sort": 101
+            },
+            {
+                "chartName": "Assets Sales Volume",
+                "width": 12,
+                "height": 5,
+                "row": 16,
+                "column": 1,
+                "sort": 161
+            },
+            {
+                "chartName": "Drawdown",
+                "width": 12,
+                "height": 4,
+                "row": 21,
+                "column": 1,
+                "sort": 211
+            }
+        ],
+        "md": [
+            {
+                "chartName": "Strategy Equity",
+                "width": 12,
+                "height": 9,
+                "row": 1,
+                "column": 1,
+                "sort": 11
+            },
+            {
+                "chartName": "Portfolio Margin",
+                "width": 12,
+                "height": 6,
+                "row": 10,
+                "column": 1,
+                "sort": 101
+            },
+            {
+                "chartName": "Assets Sales Volume",
+                "width": 12,
+                "height": 5,
+                "row": 16,
+                "column": 1,
+                "sort": 161
+            },
+            {
+                "chartName": "Drawdown",
+                "width": 12,
+                "height": 4,
+                "row": 21,
+                "column": 1,
+                "sort": 211
+            }
+        ],
+        "lg": [
+            {
+                "chartName": "Strategy Equity",
+                "width": 12,
+                "height": 9,
+                "row": 1,
+                "column": 1,
+                "sort": 11
+            },
+            {
+                "chartName": "Portfolio Margin",
+                "width": 12,
+                "height": 6,
+                "row": 10,
+                "column": 1,
+                "sort": 101
+            },
+            {
+                "chartName": "Assets Sales Volume",
+                "width": 12,
+                "height": 5,
+                "row": 16,
+                "column": 1,
+                "sort": 161
+            },
+            {
+                "chartName": "Drawdown",
+                "width": 12,
+                "height": 4,
+                "row": 21,
+                "column": 1,
+                "sort": 211
+            }
+        ],
+        "xl": [
+            {
+                "chartName": "Strategy Equity",
+                "width": 12,
+                "height": 9,
+                "row": 1,
+                "column": 1,
+                "sort": 11
+            },
+            {
+                "chartName": "Portfolio Margin",
+                "width": 12,
+                "height": 6,
+                "row": 10,
+                "column": 1,
+                "sort": 101
+            },
+            {
+                "chartName": "Assets Sales Volume",
+                "width": 12,
+                "height": 5,
+                "row": 16,
+                "column": 1,
+                "sort": 161
+            },
+            {
+                "chartName": "Drawdown",
+                "width": 12,
+                "height": 4,
+                "row": 21,
+                "column": 1,
+                "sort": 211
+            }
+        ]
     }
 }

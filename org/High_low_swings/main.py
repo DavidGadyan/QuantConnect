@@ -233,7 +233,17 @@ class SmartMoneyBTC(QCAlgorithm):
         abs_angles = [abs(a) for a in angles]
         first_abs = abs_angles[0]
         last_abs = abs_angles[-1]
-        is_plateauing = first_abs > 0 and last_abs < first_abs * 0.4
+
+        # compression detection: bar distances between swings getting shorter
+        bar_distances = []
+        for i in range(len(pts) - 4, len(pts) - 1):
+            if i >= 0:
+                bar_distances.append(pts[i + 1]["bar_idx"] - pts[i]["bar_idx"])
+        is_compressing = (len(bar_distances) >= 2
+                          and bar_distances[-1] < bar_distances[0] * 0.7)
+
+        is_plateauing = (first_abs > 0 and last_abs < first_abs * 0.4) or \
+                        (first_abs > 0 and last_abs < first_abs * 0.6 and is_compressing)
 
         drift = 0
         if len(pts) >= 3 and pts[-3]["level"] != 0:

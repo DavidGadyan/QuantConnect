@@ -8,7 +8,7 @@ Collection of QuantConnect strategy experiments and research projects.
 
 Short-term `BTCUSDT` swing strategy built on `1-minute` candles. It detects directional bias from market structure using swing highs/lows and `HH`, `HL`, `LH`, `LL` classification, then waits for a pullback before entering instead of chasing the initial move.
 
-**Best model:** `fixF` — Binance Futures + ADX<20 + RSI 45/55 + 12hr cooldown
+**Best model:** `fixI` — Binance Futures + ADX<20 + RSI 45/55 + 12hr cooldown + enhanced plateau
 
 #### Logic
 
@@ -42,15 +42,14 @@ Short-term `BTCUSDT` swing strategy built on `1-minute` candles. It detects dire
 | TP | `max(32 x ATR(500), 10%)` |
 | trailing stop | activate at `1.5%` profit, trail at `1%` |
 
-#### Backtest Results (fixF — Futures)
+#### Backtest Results (fixI — Futures)
 
 Profitable across all time periods tested:
 
 | Period | Net Profit | Drawdown | Orders | Fees | Win Rate | Sharpe |
 |--------|-----------|----------|--------|------|----------|--------|
-| 1.25yr (2025-2026) | `+15.84%` | `4.3%` | `303` | `₮385` | `59%` | `0.993` |
-| 3yr (2023-2026) | `+34.19%` | `10.2%` | `1,145` | `₮1,519` | `40%` | `0.493` |
-| 6yr (2020-2026) | `+36.28%` | `28.4%` | `2,897` | `₮3,854` | `54%` | `0.234` |
+| 3yr (2023-2026) | `+34.54%` | `10.2%` | `1,145` | `₮1,521` | `40%` | `0.499` |
+| 6yr (2020-2026) | `+42.43%` | `29.0%` | `2,897` | `₮4,019` | `54%` | `0.303` |
 
 #### Improvement History
 
@@ -64,9 +63,10 @@ Profitable across all time periods tested:
 | fixA | Switch to Binance Futures | — | `-5.36%` |
 | fixB | + ADX(28) < 25 range filter | — | `-2.07%` |
 | fixC | + RSI 45/55 (was 40/60) | `+18.08%` | `+29.89%` |
-| **fixF** | **ADX<20 + 12hr cooldown** | **`+15.84%`** | **`+34.19%`** |
+| fixF | ADX<20 + 12hr cooldown | `+15.84%` | `+34.19%` |
+| **fixI** | **+ Enhanced plateau detection** | — | **`+34.54%`** |
 
-Over 40 parameter changes tested. See `org/High_low_swings/experiment_log.md` for full results.
+Over 45 parameter changes tested. See `org/High_low_swings/experiment_log.md` for full results.
 
 #### Key Insights
 
