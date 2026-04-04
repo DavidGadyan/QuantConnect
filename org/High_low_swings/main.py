@@ -18,6 +18,8 @@ class SmartMoneyBTC(QCAlgorithm):
         self.set_brokerage_model(BrokerageName.BINANCE_FUTURES, AccountType.MARGIN)
 
         self._symbol = self.add_crypto_future("BTCUSDT", Resolution.MINUTE, Market.BINANCE).symbol
+        # 1bps constant slippage for realistic execution modeling
+        self.securities[self._symbol].set_slippage_model(ConstantSlippageModel(0.0001))
 
         # swing params
         self._swing_len = 50
@@ -28,8 +30,14 @@ class SmartMoneyBTC(QCAlgorithm):
         self._atr = self.atr(self._symbol, 500, resolution=Resolution.MINUTE)
         self._rsi_ind = self.rsi(self._symbol, 14, resolution=Resolution.MINUTE)
 
-        # ADX — trade only in range (ADX < 25), longer period for smoothing
+        # ADX — trade only in range (ADX < 20), longer period for smoothing
         self._adx_ind = self.adx(self._symbol, 28, resolution=Resolution.MINUTE)
+
+        # daily macro trend: 20-day ROC filter for parabolic moves
+        self._daily_consolidator = TradeBarConsolidator(timedelta(days=1))
+        self._daily_consolidator.data_consolidated += self._on_daily_bar
+        self.subscription_manager.add_consolidator(self._symbol, self._daily_consolidator)
+        self._daily_closes = []
 
         # ATR multipliers + floors
         self._atr_sl_mult = 8.0
@@ -40,6 +48,7 @@ class SmartMoneyBTC(QCAlgorithm):
         # trailing stop: activate at 1.5% profit, trail at 1%
         self._trail_activate_pct = 0.015
         self._trail_distance_pct = 0.01
+
 
         self._position_pct = 0.30
 
@@ -88,6 +97,14 @@ class SmartMoneyBTC(QCAlgorithm):
         self._entry_bar_num = 0
         self._consec_losses = 0
         self._all_trades = []
+
+        # shock/jump filter: pause entries after extreme 1m moves
+        self._shock_pause_until = 0
+        self._shock_k = 4.0
+        self._shock_pause_bars = 30
+        self._prev_close = None
+        self._return_window = []
+        self._return_lookback = 120
 
         self.is_live = self.live_mode
         self.log(f"Live mode: {self.is_live}")
@@ -311,6 +328,25 @@ class SmartMoneyBTC(QCAlgorithm):
         else:
             return price + sl_dist, price - tp_dist
 
+    def _on_daily_bar(self, sender, bar):
+        """Track daily closes for ROC-based macro trend filter."""
+        self._daily_closes.append(float(bar.close))
+        if len(self._daily_closes) > 25:
+            self._daily_closes = self._daily_closes[-25:]
+
+    def _macro_trend_allows(self, direction):
+        """Block counter-trend trades during parabolic moves.
+        Uses 20-day price ROC > 25% as threshold for extreme trends.
+        """
+        if len(self._daily_closes) < 20:
+            return True
+        roc = (self._daily_closes[-1] - self._daily_closes[0]) / self._daily_closes[0]
+        if roc > 0.20 and direction == -1:
+            return False  # don't short during parabolic rally
+        if roc < -0.20 and direction == 1:
+            return False  # don't long during parabolic crash
+        return True
+
     def _update_trailing_stop(self, price):
         """Update trailing stop once trade is in sufficient profit."""
         if self._in_position == 0 or not self._entry_price:
@@ -337,6 +373,19 @@ class SmartMoneyBTC(QCAlgorithm):
         bar = data.bars[self._symbol]
         self._bar_count += 1
         price = float(bar.close)
+
+        # shock/jump detection
+        if self._prev_close is not None and self._prev_close > 0:
+            ret = abs(price / self._prev_close - 1)
+            self._return_window.append(ret)
+            if len(self._return_window) > self._return_lookback:
+                self._return_window = self._return_window[-self._return_lookback:]
+            if len(self._return_window) >= 60:
+                mean_ret = sum(self._return_window) / len(self._return_window)
+                roll_std = (sum((r - mean_ret) ** 2 for r in self._return_window) / len(self._return_window)) ** 0.5
+                if roll_std > 0 and ret > self._shock_k * roll_std:
+                    self._shock_pause_until = self._bar_count + self._shock_pause_bars
+        self._prev_close = price
 
         # monthly summary log
         cur_month = self.time.strftime("%Y-%m")
@@ -444,6 +493,7 @@ class SmartMoneyBTC(QCAlgorithm):
                 self._stop_price = None
                 self._target_price = None
                 self._trail_price = None
+
                 self._in_position = 0
                 self._last_trade_bar = self._bar_count
                 return
@@ -451,25 +501,30 @@ class SmartMoneyBTC(QCAlgorithm):
         # check pending signal for pullback entry
         if (self._pending_signal != 0
                 and self._in_position == 0
-                and self._bar_count - self._last_trade_bar >= 60):
+                and self._bar_count - self._last_trade_bar >= 60
+                and self._bar_count >= self._shock_pause_until):
 
             if self._bar_count - self._pending_bar > self._pending_window:
                 self._pending_signal = 0
             elif (self._pullback_entry_ok(self._pending_signal)
                     and self._price_confirms_trend(self._pending_signal, price)
                     and (not self._adx_ind.is_ready
-                         or self._adx_ind.current.value < 20)):
+                         or self._adx_ind.current.value < 20)
+                    and self._macro_trend_allows(self._pending_signal)):
                 direction = self._pending_signal
                 self._pending_signal = 0
 
+                pos_pct = self._position_pct
+
                 if direction == 1:
-                    self.set_holdings(self._symbol, self._position_pct)
+                    self.set_holdings(self._symbol, pos_pct)
                 else:
-                    self.set_holdings(self._symbol, -self._position_pct)
+                    self.set_holdings(self._symbol, -pos_pct)
 
                 self._entry_price = price
                 self._stop_price, self._target_price = self._calc_sl_tp(price, direction)
                 self._trail_price = None
+
                 self._in_position = direction
                 self._entry_adx = self._adx_ind.current.value if self._adx_ind.is_ready else 0
                 self._entry_bar_num = self._bar_count

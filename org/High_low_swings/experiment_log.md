@@ -17,14 +17,58 @@
 
 ---
 
-## CURRENT BEST: fixI — fixF + Enhanced Plateau Detection
+## CURRENT BEST: fixK — fixJ + Daily ROC Parabolic Filter
 
-**Best 6yr return (+42.43%) and Sharpe (0.303). Profitable across ALL time periods.**
+**Blocks counter-trend entries during parabolic moves (20-day price ROC > 20%). Prevents shorting during bull runs and longing during crashes. Uses daily consolidator to track closes.**
 
-| Period | Net Profit | Drawdown | Orders | Fees | Win Rate | P/L Ratio | Sharpe |
-|--------|-----------|----------|--------|------|----------|-----------|--------|
-| 3yr (2023-2026) | **+34.54%** | 10.2% | 1,145 | ₮1,521 | 40% | 2.01 | 0.499 |
-| 6yr (2020-2026) | **+42.43%** | 29.0% | 2,897 | ₮4,019 | 54% | 0.94 | 0.303 |
+| Period | Net Profit | CAGR | Drawdown | Orders | Fees | Win Rate | P/L Ratio | Sharpe | Sortino | PSR |
+|--------|-----------|------|----------|--------|------|----------|-----------|--------|---------|-----|
+| 1.25yr (2025-2026) | **+23.36%** | 18.30% | 4.3% | 286 | ₮377 | 62% | 1.10 | 1.747 | 2.564 | 94.1% |
+| 3yr (2023-2026) | **+74.69%** | 18.71% | 6.4% | 1,098 | ₮1,759 | 42% | 2.27 | 1.277 | 2.565 | 93.5% |
+| 6yr (2020-2026) | **+112.53%** | 12.81% | 19.2% | 2,670 | ₮4,447 | 56% | 1.00 | 0.921 | 1.509 | 64.8% |
+
+**With 1bps slippage (ConstantSlippageModel(0.0001)):**
+
+| Period | No Slip | With Slip | Slip Cost | DD (slip) | Sharpe (slip) |
+|--------|---------|-----------|-----------|-----------|---------------|
+| 1.25yr | +23.36% | +22.27% | -1.09% | 4.4% | 1.636 |
+| 3yr | +74.69% | +69.15% | -5.54% | 6.8% | 1.165 |
+| 6yr | +112.53% | +95.82% | -16.71% | 20.9% | 0.790 |
+
+Edge survives realistic execution across all periods. Slippage is now active in the codebase by default.
+
+### What changed from fixJ to fixK:
+- **Daily ROC parabolic filter**: consolidates 1-min bars into daily bars, tracks last 20 daily closes
+- When 20-day price ROC > +20%: blocks short entries (don't short into parabolic rally)
+- When 20-day price ROC < -20%: blocks long entries (don't long into parabolic crash)
+- Only ~200 trades blocked across 6yr, but those were the worst losers (counter-trend entries during 2021 bull run, 2022 bear crash)
+- **Most impactful single change in strategy history**: 6yr return +42.64% → **+112.53%** (+164%), DD 25.5% → 19.2%, Sharpe 0.310 → **0.921** (+197%)
+- 3yr: +43.54% → **+74.69%**, DD 10.0% → **6.4%**, Sharpe 0.766 → **1.277** (+67%)
+- 1.25yr: +21.08% → **+23.36%**, Sharpe 1.501 → **1.747** (+16%)
+
+### 2020-2022 Diagnostic (before fix)
+| Year | Return | DD | Sharpe | WR | P/L | Problem |
+|------|--------|-----|--------|-----|------|---------|
+| 2020 | +11.81% | 8.3% | 1.085 | 67% | 0.57 | Profitable — COVID crash recovered |
+| 2021 | +1.96% | 15.0% | 0.203 | 65% | 0.56 | Near-flat, 15% DD from counter-trend shorts |
+| 2022 | **-13.65%** | **17.0%** | -1.279 | 57% | 0.63 | **Main culprit** — longs against bear market |
+
+### ROC threshold comparison
+| ROC Threshold | 6yr Return | 6yr DD | 6yr Sharpe | 3yr Return | 3yr DD | 1.25yr Return |
+|---------------|-----------|--------|-----------|-----------|--------|--------------|
+| 25% | +80.87% | 21.7% | 0.655 | +70.39% | 7.1% | +21.80% |
+| **20%** | **+112.53%** | **19.2%** | **0.921** | **+74.69%** | **6.4%** | **+23.36%** |
+| 15% | +102.82% | 15.5% | 0.851 | +73.43% | 5.9% | +22.12% |
+
+### Previous best: fixJ — fixI + Shock/Jump Filter
+
+| Period | Net Profit | CAGR | Drawdown | Orders | Fees | Win Rate | P/L Ratio | Sharpe | Sortino | PSR |
+|--------|-----------|------|----------|--------|------|----------|-----------|--------|---------|-----|
+| 1.25yr (2025-2026) | +21.08% | 16.55% | 4.3% | 293 | ₮387 | 61% | 1.07 | 1.501 | 2.342 | 90.1% |
+| 3yr (2023-2026) | +43.54% | 11.76% | 10.0% | 1,129 | ₮1,557 | 41% | 2.02 | 0.766 | 1.209 | 71.7% |
+| 6yr (2020-2026) | +42.64% | 5.84% | 25.5% | 2,867 | ₮3,795 | 55% | 0.93 | 0.310 | 0.455 | 15.7% |
+
+**With 1bps slippage:** +38.86% (3yr), Sharpe 0.637 — edge survives realistic execution.
 
 | Parameter | Value |
 |-----------|-------|
@@ -44,6 +88,16 @@
 | **ADX filter** | **ADX(28) < 20 — trade only in range** (was < 25) |
 | opposite_cancels | opposite swing signal cancels pending |
 | price_confirms | price > last swing low (long) / price < last swing high (short) |
+| **shock filter** | **pause entries 30 bars after abs(1m return) > 4σ rolling stdev (120-bar window)** |
+
+### What changed from fixI to fixJ:
+- **Shock/jump filter**: pauses all entries for 30 minutes after an extreme 1-minute price move
+- "Extreme" = absolute return > 4x rolling standard deviation (computed on 120-bar window of absolute returns)
+- Prevents entering during liquidation cascades, flash crashes, or news-driven spikes
+- Pending signal stays alive during pause — it just can't trigger entry until pause expires
+- 3yr improvement: +34.54% → **+43.54%**, Sharpe 0.499 → **0.766** (+53% Sharpe improvement)
+- 1.25yr improvement: +15.84% → **+21.08%**, Sharpe 0.993 → **1.501**
+- 6yr DD improved: 29.0% → **25.5%**
 
 ### What changed from fixF to fixI:
 - **Enhanced plateau detection**: angles declining OR (angles declining moderately + swing compression)
@@ -61,7 +115,9 @@
 | fixB | + ADX(28) < 25 range filter | — | -2.07% | — |
 | fixC | + RSI 45/55 (was 40/60) | +18.08% | +29.89% | +34.41% |
 | fixF | ADX<20 + 12hr cooldown | +15.84% | +34.19% | +36.28% |
-| **fixI** | **+ Enhanced plateau detection** | — | **+34.54%** | **+42.43%** |
+| fixI | + Enhanced plateau detection | — | +34.54% | +42.43% |
+| fixJ | + Shock/jump filter (4σ, 30-bar pause) | +21.08% | +43.54% | +42.64% |
+| **fixK** | **+ Daily ROC parabolic filter (20-day ROC > 20%)** | **+23.36%** | **+74.69%** | **+112.53%** |
 
 ### Spot Margin Comparison (fixC logic on Binance Spot)
 
@@ -112,6 +168,74 @@ Q4 2023 is the worst period (**-8.25%**). BTC rallied ~27k→42k (Oct-Dec 2023).
 | fixH | ADX hysteresis (18/23, 60-bar dwell) | +19.02% | 0.055 | 10.3% | Too restrictive, 1hr dwell blocks most entries |
 | fixH2 | ADX hysteresis soft (20/24, 15-bar) | +25.93% | 0.269 | 16.2% | Dwell still delays entries, worse DD |
 | **fixI** | **Enhanced plateau (+ compression)** | **+34.54%** | **0.499** | **10.2%** | **Better structure reading, +6% on 6yr** |
+| **fixJ** | **Shock filter (4σ, 30-bar pause)** | **+43.54%** | **0.766** | **10.0%** | **Prevents entries during vol spikes, +9% return, +53% Sharpe** |
+| fixK | 15m ADX consolidated (threshold 25) | +13.59% | -0.136 | 16.3% | 15m ADX too loose at 25, lets bad trades through |
+| fixK2 | 15m ADX consolidated (threshold 20) | +9.17% | -0.369 | 7.0% | 15m ADX at 20 too restrictive, blocks most trades |
+| fixL | Shock + BOS invalidation (SMC) | +40.31% | 0.683 | 7.4% | BOS too aggressive — range strategy needs price near swing levels |
+| fixM | Shock + liquidity sweep invalidation (SMC) | +42.61% | 0.757 | 11.3% | Marginal — sweep filter doesn't add value |
+| fixN | Shock + 1bps slippage model | +38.86% | 0.637 | 10.2% | Edge survives slippage — 4.7% cost from realistic execution |
+
+### Optimization Tests (from fixJ baseline, targeting DD<10%, Sharpe>1, WR>50%)
+
+#### Position Sizing Variants
+| Fix | Change | 3yr Return | Sharpe | DD | WR | Notes |
+|-----|--------|-----------|--------|-----|-----|-------|
+| fix2 | 25% flat position (was 30%) | +35.37% | 0.631 | **8.4%** | 41% | DD under target but Sharpe drops |
+| fix7 | 25% + vol scale 0.5-1.5 | +56.70% | **0.911** | 12.4% | 41% | Actually flat 37.5% — BTC ATRP always at cap |
+| fix7b | 25% + vol scale 0.4-1.0 | +35.38% | 0.631 | 8.4% | 41% | Identical to fix2 — downscaling has no effect |
+| fix8a | 30% + vol scale 0.4-1.0 | +43.55% | 0.766 | 10.0% | 41% | Identical to fixJ — vol scaling is a no-op |
+| fix8b | 25% + vol scale 0.5-1.2 | +43.58% | 0.767 | 10.0% | 41% | 1.2 cap too small for any effect |
+
+**Key finding:** Vol-scaling on 1-min ATR is actually flat sizing in disguise. BTC's ATRP (~0.1-0.2%) is always well below the 0.5% target, so scale factor always hits the cap. DD/Sharpe/return trade-off is strictly linear with position size.
+
+#### Exit Strategy Changes (all failed)
+| Fix | Change | 3yr Return | Sharpe | DD | WR | Notes |
+|-----|--------|-----------|--------|-----|-----|-------|
+| fix1 | Tighter trail 1.0%/0.7% (was 1.5%/1.0%) | +11.21% | -0.257 | 9.3% | 45% | Destroys P/L ratio by cutting winners early |
+| fix3 | SL 6×ATR/2.0% (was 8×ATR/2.5%) | +10.81% | -0.281 | 8.0% | 35% | Tighter SL = more stop-outs, smaller losses but too many |
+| fix4 | Breakeven stop + TP 5% (at +0.5%) | -5.35% | -1.116 | 15.0% | 20% | BE stop converts winners to flat, TP 5% caps upside |
+| fix5 | Time-based exit (stale trades) | +0.46% | -0.764 | 9.9% | 23% | Exits before big moves materialize |
+| fix10 | Partial TP at 2% (close half) | +32.59% | 0.496 | 9.7% | 48% | WR improved to 48% but P/L dropped from 2.02 to 1.44 |
+
+**Key finding:** Strategy's edge is in asymmetric P/L (2.02 ratio). Any exit change that improves WR destroys the fat-tail profits that carry the strategy.
+
+#### Entry Filter Changes
+| Fix | Change | 3yr Return | Sharpe | DD | WR | Notes |
+|-----|--------|-----------|--------|-----|-----|-------|
+| fix6 | ADX slope filter (ADX rising = skip) | +23.68% | 0.229 | 12.2% | 40% | ADX slope too noisy on 1-min, blocks good entries |
+| fix9 | ATRP < 0.8% entry gate | +43.54% | 0.766 | 10.0% | 41% | No effect — 1-min ATRP always below 0.8% |
+| fix9b | ATRP < 0.5% entry gate | +43.53% | 0.765 | 10.0% | 41% | No effect — 1-min ATRP always below 0.5% |
+
+**Key finding:** 1-min ATRP is always 0.1-0.3% for BTC, so percentage-based vol filters don't work at this resolution.
+
+#### Confidence-Based Position Sizing (tested, rejected — didn't improve all periods)
+| Fix | Strong/Weak | 3yr Return | Sharpe | DD | WR | Notes |
+|-----|-------------|-----------|--------|-----|-----|-------|
+| fix11 | 35% / 20% | +32.80% | 0.567 | **7.0%** | 41% | Most trades are 6/8, so avg pos ~20% |
+| fix11b | 33% / 25% | +38.15% | 0.681 | 8.5% | 41% | Better balance |
+| fix11c | 37% / 25% | +39.83% | 0.708 | 8.6% | 41% | Approaching fixJ return |
+| fix11d | 40% / 25% | +40.99% | 0.723 | 8.6% | 41% | DD stable at 8.6% |
+| fix11e | 45% / 25% | +42.69% | 0.740 | 8.8% | 41% | Near fixJ return with lower DD |
+| fix11f | 50% / 25% | +44.95% | 0.766 | 8.8% | 41% | Matches fixJ Sharpe, better DD |
+| fix11g | 55% / 25% | +47.00% | 0.783 | 8.9% | 41% | New best return at DD<10% |
+| fix11h | 60% / 25% | +48.50% | 0.785 | 9.0% | 41% | |
+| fix11i | 65% / 25% | +50.92% | 0.804 | 9.2% | 41% | 50%+ return with DD<10% |
+| fix11j | 70% / 25% | +52.77% | 0.810 | 9.3% | 41% | |
+| fix11k | 75% / 25% | +54.58% | 0.814 | 9.3% | 41% | |
+| fix11L | 80% / 25% | +56.81% | 0.824 | 9.4% | 41% | |
+| **fix11n** | **85% / 25%** | **+58.69%** | **0.827** | **9.6%** | 41% | **Best before plateau bug fix** |
+| fix11m | 90% / 25% | +60.84% | 0.833 | 10.2% | 41% | DD exceeds 10% target |
+| fix11o | 85% / 15% | +44.87% | 0.623 | 11.5% | 41% | Too little on weak — loses diversification |
+| fix11p | 85% / 20% | +51.77% | 0.734 | 10.4% | 41% | Still too concentrated |
+| fix11n-p | 85% / 25% + plateau fix | +57.46% | 0.806 | 9.6% | 41% | Plateau signals correctly use 25% |
+
+**Key finding:** High-confidence signals (7-8/8 swings) have dramatically lower DD contribution than low-confidence signals (6/8). However, confidence sizing improved 3yr (+57%) but **worsened 6yr DD (32.1% vs 25.5%) and 1.25yr DD (9.5% vs 4.3%)**. Rejected because it didn't improve ALL periods simultaneously. The ROC parabolic filter (fixK) achieved better balanced improvements.
+
+#### Target Assessment (confidence sizing approach)
+- **DD < 10% (3yr): ACHIEVED** — 9.6% (was 10.0% with fixJ)
+- **Sharpe > 1.0 (3yr): NOT ACHIEVABLE** — 0.806 is best at DD<10%. Strategy's 41% WR / 2.1 P/L profile means annual std dev scales proportionally with return.
+- **WR > 50% (3yr): NOT ACHIEVABLE** — partial TP gets to 48% but destroys P/L ratio (1.44 vs 2.10), making Sharpe worse.
+- **All-period improvement: NOT ACHIEVED** — confidence sizing sacrificed 6yr DD and 1.25yr DD. Approach abandoned in favor of ROC filter (fixK).
 
 ### fixF vs fixC Comparison
 
@@ -318,11 +442,21 @@ Q4 2023 is the worst period (**-8.25%**). BTC rallied ~27k→42k (Oct-Dec 2023).
 3. **ADX inversion (trade low ADX, skip high)** — matches the strategy's true edge regime (range-bound, not trending)
 4. **RSI range shift (45/55 vs 40/60)** — consistent with RSI "range shift" behavior: uptrend RSI oscillates 40-90, so <40 is already too deep
 5. **8-swing lookback with >=6 threshold** — more history = stronger trend confirmation without being too strict
-6. **Position sizing** — 30% is optimal return vs drawdown balance
-7. **Trend-confirmation filters (EMA, MACD) conflict with pullback logic** — momentum says "don't buy dip" while RSI says "buy dip"
-8. **Chandelier Exit failed due to ATR scale mismatch** — ATR(500) on 1-min gives tiny values, exits too tight
-9. **RSI(14) is optimal** — RSI(7) too noisy, RSI(21) too slow
-10. **ETH doesn't work** — -5.58% with same params on spot
+6. **Confidence-based sizing improves 3yr but not all periods** — 85%/25% beats flat 30% on 3yr (+57%, DD 9.6%) but worsens 6yr DD (32.1% vs 25.5%) and 1.25yr DD (9.5% vs 4.3%). Rejected for unbalanced improvement.
+7. **Daily ROC parabolic filter is the most impactful change in strategy history** — 20-day price ROC > 20% blocks counter-trend entries during extreme trends. 6yr: +42.64% → +112.53% (+164%), DD 25.5% → 19.2%, Sharpe 0.310 → 0.921. Only ~200 trades blocked but they were the worst losers.
+8. **2020-2022 losses were counter-trend entries in parabolic markets** — 2022 was -13.65% (longs against bear), 2021 near-flat with 15% DD (shorts against bull). ROC filter precisely targets these without affecting moderate trends.
+9. **Trend-confirmation filters (EMA, MACD) conflict with pullback logic** — momentum says "don't buy dip" while RSI says "buy dip"
+10. **Chandelier Exit failed due to ATR scale mismatch** — ATR(500) on 1-min gives tiny values, exits too tight
+11. **RSI(14) is optimal** — RSI(7) too noisy, RSI(21) too slow
+12. **ETH doesn't work** — -5.58% with same params on spot
+13. **Shock filter is the biggest single improvement** — pausing entries after extreme 1m moves (+9% return, +53% Sharpe). The strategy's weakness was entering during volatility spikes where swing structure is unreliable.
+14. **SMC BOS/CHoCH invalidation hurts a range strategy** — BOS cancels signals when price breaks swing levels, but in a range, price oscillating around swing levels is normal behavior
+15. **15m ADX consolidation doesn't help** — either too loose (ADX<25, +13.59%) or too restrictive (ADX<20, +9.17%). The 1m ADX<20 gate is better calibrated for this strategy.
+16. **Liquidity sweep invalidation is neutral** — didn't add or remove significant value (-0.9% return vs shock alone)
+17. **Edge survives 1bps slippage across all periods (fixK)** — +22.27% (1.25yr), +69.15% (3yr), +95.82% (6yr) with ConstantSlippageModel(0.0001). Slippage cost scales with trade count: ~1% (1.25yr, 286 orders), ~5.5% (3yr, 1098 orders), ~17% (6yr, 2670 orders). Slippage now active in codebase by default.
+18. **Vol-scaling on 1-min ATR is a no-op** — BTC's ATRP (~0.1-0.2%) is always below any reasonable target, so scale factor always hits the cap. It's just flat sizing in disguise.
+19. **Exit changes destroy the asymmetric edge** — the strategy's P/L ratio of 2.02 relies on rare big winners. Tighter trails, tighter TP, breakeven stops, time exits, and partial TP all cut these winners.
+20. **WR > 50% is structurally incompatible** — partial TP gets WR to 48% but P/L drops to 1.44, net effect is worse Sharpe. The strategy's edge IS low WR + high P/L.
 
 ## Why fixC Works Together (Research Analysis)
 - **Fee reduction** preserves gross edge that was always there (+23% gross over 3yr on spot)
